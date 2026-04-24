@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model Question {
+  id             String           @id @default(cuid())
+  key            String           @unique
+  text           String
+  // "SINGLE_CHOICE" | "FREE_TEXT" (SQLite n'a pas d'enum, on stocke en string)
+  type           String           @default("SINGLE_CHOICE")
+  placeholder    String?
+  helperText     String?
+  orderHint      Int              @default(0)
+  active         Boolean          @default(true)
+  askIfEquals    Json?
+  askIfNotEquals Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  options        QuestionOption[]
+  answers        SessionAnswer[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  key        String
+  label      String
+  jobWeights Json
+  questionId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers    SessionAnswer[]
+
+  @@unique([questionId, key])
+}
+
+model QuestionnaireSession {
+  id        String          @id @default(cuid())
+  status    SessionStatus   @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  answers   SessionAnswer[]
+  matches   MatchResult[]
+}
+
+model SessionAnswer {
+  id                String               @id @default(cuid())
+  sessionId         String
+  questionId        String
+  // Réponse de type QCM : référence l'option choisie
+  optionId          String?
+  // Réponse de type texte libre
+  freeText          String?
+  // Poids métiers extraits par l'IA à partir du texte libre (cache pour éviter de rappeler l'IA)
+  extractedWeights  Json?
+  createdAt         DateTime             @default(now())
+  session           QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question          Question             @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  option            QuestionOption?      @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId])
+}
+
+model MatchResult {
+  id                 String               @id @default(cuid())
+  sessionId          String
+  jobSlug            String
+  score              Float
+  rank               Int
+  rationale          String?
+  // Fiche personnalisée générée à la demande (lazy) — null tant que l'utilisateur
+  // n'a pas visité la page fiche. Cache permanent : généré une fois, servi à l'infini.
+  personalizedContent Json?
+  createdAt          DateTime             @default(now())
+  session            QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, jobSlug]) // Lookup direct par session + métier
+}
+
+model FeedbackEvent {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  eventType   String
+  rating      Int?
+  selectedJob String?
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([eventType])
+}
