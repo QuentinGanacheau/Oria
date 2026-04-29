@@ -35,7 +35,11 @@ model QuestionOption {
   id         String   @id @default(cuid())
   key        String
   label      String
+  /// Poids des anciens slugs métier (legacy — sera supprimé après migration complète vers ROME).
   jobWeights Json
+  /// Poids des grands domaines ROME (Phase 2). Format : { "M": 3, "J": 2, ... }
+  /// où la clé est le code ROME du grand domaine. Optionnel le temps de la migration.
+  domainWeights Json?
   questionId String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -89,6 +93,37 @@ model MatchResult {
 
   @@index([sessionId])
   @@index([sessionId, jobSlug]) // Lookup direct par session + métier
+}
+
+/// Métier importé depuis l'API ROME 4.0 de France Travail.
+/// Sert de source de données pour le matching (Phase 2). Mis à jour via
+/// le script `npm run sync:rome` qui appelle l'API et upsert toutes les fiches.
+model RomeJob {
+  id                     String   @id @default(cuid())
+  /// Code ROME unique (ex: "M1805") — identifiant officiel France Travail.
+  code                   String   @unique
+  libelle                String
+  definition             String?
+  /// Hiérarchie ROME — utilisée en Phase 2 pour le filtrage par grand domaine.
+  codeGrandDomaine       String?
+  libelleGrandDomaine    String?
+  codeDomaine            String?
+  libelleDomaine         String?
+  /// Compétences "savoirs" et "savoir-faire" stockées en JSON pour souplesse.
+  /// Format attendu : Array<{ libelle: string; code?: string; type?: string }>.
+  competencesSavoirs     Json?
+  competencesSavoirFaire Json?
+  /// Contextes de travail (lieux, conditions…) — JSON brut depuis l'API.
+  contextesTravail       Json?
+  /// Conditions d'accès au métier (niveau de diplôme, formations).
+  /// Texte libre extrait du champ `accesEmploi` de l'API ROME.
+  accesEmploi            String?
+  /// Date du dernier import — permet de détecter les fiches obsolètes.
+  syncedAt               DateTime @default(now())
+  createdAt              DateTime @default(now())
+
+  @@index([codeGrandDomaine])
+  @@index([codeDomaine])
 }
 
 model FeedbackEvent {

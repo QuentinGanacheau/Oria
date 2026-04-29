@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { FeedbackModule } from './feedback/feedback.module';
 import { JobsModule } from './jobs/jobs.module';
+import { MatchingModule } from './matching/matching.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestionnaireModule } from './questionnaire/questionnaire.module';
 import { BillingModule } from './billing/billing.module';
@@ -15,6 +16,7 @@ import { BillingModule } from './billing/billing.module';
     QuestionnaireModule,
     BillingModule,
     FeedbackModule,
+    MatchingModule,
   ],
   controllers: [AppController],
   providers: [],

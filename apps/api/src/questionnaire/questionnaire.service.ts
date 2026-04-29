@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
 import { AiService, type RationaleInput } from '../ai/ai.service';
-import { JobsService } from '../jobs/jobs.service';
-import type { JobProfile, JobSlug } from '../jobs/job.types';
+import { JobsService, type JobProfile } from '../jobs/jobs.service';
+import { MatchingService } from '../matching/matching.service';
+import type { MatchingAnswer } from '../matching/matching.types';
 import { PrismaService } from '../prisma/prisma.service';
 
 type PublicQuestion = {
@@ -16,21 +22,28 @@ type PublicQuestion = {
 
 const MAX_FREE_TEXT_LENGTH = 2000;
 
-type MatchResult = {
+type MatchOutput = {
   job: JobProfile;
+  /** Score normalisé 0-100. */
   score: number;
+  /** Identique à `score` côté frontend (rétrocompatibilité). */
   scorePercent: number;
-  /** Explication personnalisée générée par l'IA. Null si IA désactivée ou en erreur. */
+  /** Explication personnalisée IA. Null si IA désactivée. */
   rationale: string | null;
 };
 
 @Injectable()
 export class QuestionnaireService {
+  private readonly logger = new Logger(QuestionnaireService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobs: JobsService,
     private readonly ai: AiService,
+    private readonly matching: MatchingService,
   ) {}
+
+  // ─── Lifecycle session ────────────────────────────────────────────────────
 
   async startSession(metadata?: Record<string, unknown>) {
     const session = await this.prisma.questionnaireSession.create({
@@ -62,9 +75,10 @@ export class QuestionnaireService {
       where: { key: input.questionKey },
       include: { options: true },
     });
-    if (!question || !question.active) throw new BadRequestException('Question invalide.');
+    if (!question || !question.active) {
+      throw new BadRequestException('Question invalide.');
+    }
 
-    // Dispatch selon le type de question
     if (question.type === 'FREE_TEXT') {
       await this.saveFreeTextAnswer(session.id, question, input.freeText);
     } else {
@@ -74,6 +88,8 @@ export class QuestionnaireService {
     const next = await this.getNextQuestionForSession(session.id);
     return { complete: next === null, question: next };
   }
+
+  // ─── Sauvegarde des réponses ──────────────────────────────────────────────
 
   private async saveOptionAnswer(
     sessionId: string,
@@ -91,7 +107,6 @@ export class QuestionnaireService {
       update: {
         optionId: option.id,
         freeText: null,
-        extractedWeights: Prisma.JsonNull,
       },
       create: {
         sessionId,
@@ -112,14 +127,9 @@ export class QuestionnaireService {
       throw new BadRequestException('Réponse trop longue.');
     }
 
-    // Extraction IA des poids métiers — peut échouer ou retourner null
-    // si pas de clé API : on persiste quand même le texte (signal qualitatif conservé).
-    const weights = await this.ai.extractWeightsFromText({
-      question: question.text,
-      text,
-      jobSlugs: this.jobs.listSlugs(),
-    });
-
+    // En Phase 2, le texte libre n'alimente plus le scoring par domaine
+    // (qui se fait sur les options QCM). Le texte est conservé en base et
+    // sera transmis à l'IA lors du reranking final, où il a tout son impact.
     await this.prisma.sessionAnswer.upsert({
       where: {
         sessionId_questionId: { sessionId, questionId: question.id },
@@ -127,30 +137,37 @@ export class QuestionnaireService {
       update: {
         optionId: null,
         freeText: text,
-        extractedWeights: weights
-          ? (weights as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
       },
       create: {
         sessionId,
         questionId: question.id,
         freeText: text,
-        extractedWeights: weights
-          ? (weights as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
       },
     });
   }
 
+  // ─── Finalisation : pipeline de matching ROME ─────────────────────────────
+
+  /**
+   * Termine la session et calcule le top des métiers ROME correspondant
+   * au profil de l'utilisateur.
+   *
+   * Pipeline (délégué à MatchingService) :
+   *   1. Score par grand domaine ROME (à partir des `domainWeights` des options)
+   *   2. Sélection des top 3 grands domaines
+   *   3. Récupération des métiers candidats
+   *   4. Reranking IA selon le profil complet (réponses QCM + texte libre)
+   *
+   * Puis :
+   *   5. Génération des rationales IA pour le top 3
+   *   6. Persistance en MatchResult
+   */
   async finishSession(sessionId: string) {
     const session = await this.prisma.questionnaireSession.findUnique({
       where: { id: sessionId },
       include: {
         answers: {
-          include: {
-            question: true,
-            option: true,
-          },
+          include: { question: true, option: true },
         },
       },
     });
@@ -159,14 +176,46 @@ export class QuestionnaireService {
       throw new BadRequestException('Aucune réponse enregistrée.');
     }
 
-    const totals = this.computeBaseScores(session.answers);
-    const ranked = await this.rankWithOptionalAi(totals, session.answers);
+    // 1. Construit les MatchingAnswer attendues par le pipeline
+    const matchingAnswers: MatchingAnswer[] = session.answers.map((a) => ({
+      question: a.question.text,
+      answer: a.option?.label ?? a.freeText ?? '',
+      domainWeights: this.parseDomainWeights(a.option?.domainWeights ?? null),
+    }));
 
-    // On prépare le contexte pour la génération des rationales :
-    // toutes les réponses de la session, en unifiant QCM (label de l'option)
-    // et texte libre sous le même format.
+    // 2. Pipeline complet : scoring → fetch → reranking IA
+    const matched = await this.matching.findBestJobs(matchingAnswers, {
+      topDomainsCount: 3,
+      finalTopN: 10,
+    });
+
+    if (matched.length === 0) {
+      this.logger.warn(
+        `Aucun métier matché pour la session ${sessionId}. La table RomeJob est-elle peuplée ?`,
+      );
+      // On termine quand même la session, juste avec un classement vide
+      await this.prisma.$transaction([
+        this.prisma.matchResult.deleteMany({ where: { sessionId } }),
+        this.prisma.questionnaireSession.update({
+          where: { id: sessionId },
+          data: { status: SessionStatus.COMPLETED },
+        }),
+      ]);
+      return { sessionId, matches: [] };
+    }
+
+    // 3. Hydrate les résultats avec les détails complets de chaque métier
+    const detailedMatches = await Promise.all(
+      matched.map(async (m) => ({
+        job: await this.jobs.findBySlug(m.code),
+        score: m.score,
+        rank: m.rank,
+      })),
+    );
+
+    // 4. Génère les rationales IA pour le top 3
     const rationaleInput: RationaleInput = {
-      topJobs: ranked.slice(0, 3).map((m) => ({
+      topJobs: detailedMatches.slice(0, 3).map((m) => ({
         slug: m.job.slug,
         title: m.job.title,
       })),
@@ -177,21 +226,25 @@ export class QuestionnaireService {
     };
     const rationales = await this.ai.generateRationales(rationaleInput);
 
-    // Merge rationale dans les résultats + persistance en base
-    const rankedWithRationale: MatchResult[] = ranked.map((m) => ({
-      ...m,
+    const finalMatches: MatchOutput[] = detailedMatches.map((m) => ({
+      job: m.job,
+      score: m.score,
+      // scorePercent gardé identique au score (déjà 0-100 en sortie d'IA)
+      // pour ne pas casser le contrat avec le frontend.
+      scorePercent: m.score,
       rationale: rationales?.[m.job.slug] ?? null,
     }));
 
+    // 5. Persistance : on remplace tous les anciens MatchResult de la session
     await this.prisma.$transaction([
       this.prisma.matchResult.deleteMany({ where: { sessionId } }),
       this.prisma.matchResult.createMany({
-        data: rankedWithRationale.map((item, index) => ({
+        data: detailedMatches.map((m, index) => ({
           sessionId,
-          jobSlug: item.job.slug,
-          score: item.score,
+          jobSlug: m.job.slug, // Code ROME stocké comme identifiant
+          score: m.score,
           rank: index + 1,
-          rationale: item.rationale,
+          rationale: finalMatches[index].rationale,
         })),
       }),
       this.prisma.questionnaireSession.update({
@@ -200,76 +253,26 @@ export class QuestionnaireService {
       }),
     ]);
 
-    return { sessionId, matches: rankedWithRationale };
+    return { sessionId, matches: finalMatches };
   }
 
-  private computeBaseScores(
-    answers: Array<{
-      option: { jobWeights: unknown } | null;
-      extractedWeights: unknown;
-    }>,
-  ): Record<JobSlug, number> {
-    // Construction dynamique depuis le catalogue : on n'a plus jamais
-    // à modifier ce code quand on ajoute ou retire un métier.
-    const totals = Object.fromEntries(
-      this.jobs.listSlugs().map((slug) => [slug, 0]),
-    ) as Record<JobSlug, number>;
-
-    for (const answer of answers) {
-      // Une réponse = soit une option QCM (option.jobWeights),
-      // soit un texte libre avec extractedWeights fournis par l'IA.
-      const weights = answer.option?.jobWeights ?? answer.extractedWeights;
-      if (!weights || typeof weights !== 'object') continue;
-      for (const [slug, points] of Object.entries(weights as Record<string, unknown>)) {
-        if (!this.jobs.isValidSlug(slug)) continue;
-        if (typeof points !== 'number' || Number.isNaN(points)) continue;
-        totals[slug] += points;
-      }
+  /** Parse défensif du JSON `domainWeights` venant de la DB. */
+  private parseDomainWeights(
+    raw: unknown,
+  ): Record<string, number> | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const result: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === 'number' && !Number.isNaN(v)) result[k] = v;
     }
-    return totals;
+    return Object.keys(result).length > 0 ? result : null;
   }
 
-  private async rankWithOptionalAi(
-    totals: Record<JobSlug, number>,
-    answers: Array<{
-      question: { text: string };
-      option: { label: string } | null;
-      freeText: string | null;
-    }>,
-  ): Promise<MatchResult[]> {
-    const base = (Object.keys(totals) as JobSlug[])
-      .map((slug) => ({
-        slug,
-        score: totals[slug],
-      }))
-      .sort((a, b) => b.score - a.score);
+  // ─── Sélection adaptative de la prochaine question ────────────────────────
 
-    const multipliers = await this.ai.adjustScores({
-      topJobs: base.slice(0, 5),
-      // Pour les réponses texte libre on passe le texte brut à l'IA, tronqué pour limiter les tokens
-      answers: answers.map((a) => ({
-        question: a.question.text,
-        option: a.option?.label ?? (a.freeText ?? '').slice(0, 300),
-      })),
-    });
-
-    const withAi = base.map((entry) => ({
-      slug: entry.slug,
-      score: entry.score * (multipliers?.[entry.slug] ?? 1),
-    }));
-    withAi.sort((a, b) => b.score - a.score);
-
-    const maxRaw = Math.max(...withAi.map((x) => x.score), 1);
-    // rationale est null ici : il sera renseigné par finishSession après l'appel generateRationales
-    return withAi.map((entry) => ({
-      job: this.jobs.findBySlug(entry.slug),
-      score: Number(entry.score.toFixed(3)),
-      scorePercent: Math.round((entry.score / maxRaw) * 100),
-      rationale: null,
-    }));
-  }
-
-  private async getNextQuestionForSession(sessionId: string): Promise<PublicQuestion | null> {
+  private async getNextQuestionForSession(
+    sessionId: string,
+  ): Promise<PublicQuestion | null> {
     const [questions, answers] = await Promise.all([
       this.prisma.question.findMany({
         where: { active: true },
@@ -282,8 +285,7 @@ export class QuestionnaireService {
       }),
     ]);
 
-    // Pour les conditions askIf*, seules les réponses QCM ont une clé d'option identifiable.
-    // Les réponses texte libre sont marquées présentes via une sentinelle "__free__".
+    // Sentinelle pour les réponses texte libre (pas d'option key associée).
     const answeredByKey = new Map<string, string>();
     for (const answer of answers) {
       answeredByKey.set(answer.question.key, answer.option?.key ?? '__free__');
@@ -346,14 +348,15 @@ export class QuestionnaireService {
     return Object.keys(result).length > 0 ? result : null;
   }
 
-  // Score arbitraire considéré comme "élevé" pour les questions texte libre : on les considère
-  // comme très discriminantes (signal riche non réductible à la variance de poids d'options).
+  /** Score arbitraire pour les questions FREE_TEXT (signal qualitatif fort). */
   private static readonly FREE_TEXT_VARIANCE_PROXY = 6;
 
   private sortByDiscriminatoryPower<
     T extends { type: string; options: Array<{ jobWeights: unknown }> },
   >(questions: T[]): T[] {
-    return [...questions].sort((a, b) => this.varianceScore(b) - this.varianceScore(a));
+    return [...questions].sort(
+      (a, b) => this.varianceScore(b) - this.varianceScore(a),
+    );
   }
 
   private varianceScore(question: {
@@ -375,6 +378,8 @@ export class QuestionnaireService {
     }
     if (allScores.length <= 1) return 0;
     const mean = allScores.reduce((sum, v) => sum + v, 0) / allScores.length;
-    return allScores.reduce((sum, v) => sum + (v - mean) ** 2, 0) / allScores.length;
+    return (
+      allScores.reduce((sum, v) => sum + (v - mean) ** 2, 0) / allScores.length
+    );
   }
 }

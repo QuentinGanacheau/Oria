@@ -312,6 +312,74 @@ export class AiService {
   }
 
   /**
+   * Reranke une liste de métiers candidats selon le profil utilisateur.
+   *
+   * Utilisé par le pipeline de matching ROME (Phase 2) pour sélectionner
+   * les meilleurs métiers parmi les ~100-300 candidats des top domaines.
+   *
+   * Un seul appel IA pour toute la liste, même format de retour qu'un
+   * scoring classique : { code: score 0-100 }. Température basse (0.2)
+   * car on attend de la cohérence, pas de la créativité.
+   *
+   * Retourne null si l'IA est indisponible — l'appelant gère le fallback.
+   */
+  async rankJobsForProfile(input: {
+    candidates: Array<{ code: string; libelle: string }>;
+    answers: Array<{ question: string; answer: string }>;
+  }): Promise<Record<string, number> | null> {
+    if (!this.provider || input.candidates.length === 0) return null;
+
+    const candidatesBlock = input.candidates
+      .map((c) => `${c.code}: ${c.libelle}`)
+      .join('\n');
+
+    const answersBlock = input.answers
+      .map((a) => `- "${a.question}" → ${a.answer}`)
+      .join('\n');
+
+    const prompt = [
+      "Tu es un conseiller d'orientation expert.",
+      "Voici les réponses d'un utilisateur à un questionnaire d'orientation :",
+      '',
+      answersBlock,
+      '',
+      'Voici une liste de métiers candidats (format "code: libellé") :',
+      '',
+      candidatesBlock,
+      '',
+      'Pour CHAQUE métier de la liste, attribue un score de 0 à 100 reflétant',
+      "à quel point ce métier correspond au profil de l'utilisateur :",
+      '- 0 = aucune correspondance',
+      '- 50 = correspondance correcte mais sans plus',
+      '- 100 = match exceptionnel',
+      '',
+      'Règles strictes :',
+      "- N'invente pas de codes : utilise uniquement ceux fournis ci-dessus.",
+      '- Sois discriminant : seuls 5-10 métiers méritent un score > 70.',
+      '- Retourne UNIQUEMENT du JSON valide au format :',
+      '  {"scores": {"M1805": 85, "J1502": 12, ...}}',
+    ].join('\n');
+
+    const parsed = await this.askJson<{ scores?: Record<string, number> }>(
+      prompt,
+      0.2,
+    );
+    if (!parsed?.scores) return null;
+
+    // Validation défensive : on garde uniquement les codes connus + valeurs
+    // numériques bornées dans [0, 100].
+    const validCodes = new Set(input.candidates.map((c) => c.code));
+    const safe: Record<string, number> = {};
+    for (const [code, value] of Object.entries(parsed.scores)) {
+      if (!validCodes.has(code)) continue;
+      if (typeof value !== 'number' || Number.isNaN(value)) continue;
+      safe[code] = Math.max(0, Math.min(100, Math.round(value)));
+    }
+
+    return Object.keys(safe).length > 0 ? safe : null;
+  }
+
+  /**
    * Helper privé : appelle le provider, nettoie le JSON (certains modèles
    * entourent leur réponse de blocs markdown ```json ... ```), parse,
    * renvoie `null` sur toute erreur (indisponibilité, JSON invalide…).

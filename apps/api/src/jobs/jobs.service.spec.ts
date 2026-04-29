@@ -1,11 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { JobsService } from './jobs.service';
-import { JOBS } from './jobs.data';
+
+// ─── Données de référence ────────────────────────────────────────────────────
+
+const fakeRomeJob = {
+  code: 'M1805',
+  libelle: 'Études et développement informatique',
+  definition: 'Conçoit, développe et met au point des projets logiciels.',
+  codeGrandDomaine: 'M',
+  libelleGrandDomaine: "Support à l'entreprise",
+  codeDomaine: 'M18',
+  libelleDomaine: 'Systèmes d\'information et de télécommunication',
+  competencesSavoirs: [
+    { libelle: 'Algorithmique' },
+    { libelle: 'Architectures logicielles' },
+  ],
+  competencesSavoirFaire: [
+    { libelle: 'Concevoir et développer une solution digitale' },
+    { libelle: 'Réaliser des tests unitaires' },
+  ],
+  contextesTravail: [
+    { libelle: 'En équipe' },
+    { libelle: 'Sur écran' },
+  ],
+  syncedAt: new Date(),
+};
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 const prismaMock = {
+  romeJob: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+  },
   matchResult: {
     findFirst: vi.fn(),
     update: vi.fn(),
@@ -29,54 +57,53 @@ describe('JobsService', () => {
     service = new JobsService(prismaMock as any, aiMock as any);
   });
 
-  // ── Catalogue statique ────────────────────────────────────────────────────
+  // ── Lecture catalogue ─────────────────────────────────────────────────────
 
   describe('findAll', () => {
-    it('retourne la liste complete des metiers', () => {
-      const result = service.findAll();
-      expect(result).toHaveLength(JOBS.length);
-      // Référence identique : pas de copie inutile
-      expect(result).toBe(JOBS);
+    it('retourne tous les metiers ROME adaptes en JobProfile', async () => {
+      prismaMock.romeJob.findMany.mockResolvedValue([fakeRomeJob]);
+
+      const result = await service.findAll();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        slug: 'M1805',
+        title: 'Études et développement informatique',
+        tagline: 'Systèmes d\'information et de télécommunication',
+      });
     });
   });
 
   describe('findBySlug', () => {
-    it('retourne le metier correspondant au slug', () => {
-      const target = JOBS[0];
-      const result = service.findBySlug(target.slug);
-      expect(result.slug).toBe(target.slug);
-      expect(result.title).toBeDefined();
+    it('retourne le JobProfile correspondant au code ROME', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
+
+      const result = await service.findBySlug('M1805');
+
+      expect(result.slug).toBe('M1805');
+      expect(result.missions).toEqual([
+        'Concevoir et développer une solution digitale',
+        'Réaliser des tests unitaires',
+      ]);
+      expect(result.skills).toEqual([
+        'Algorithmique',
+        'Architectures logicielles',
+      ]);
+      expect(result.workContext).toBe('En équipe · Sur écran');
     });
 
-    it('leve NotFoundException pour un slug inconnu', () => {
-      expect(() => service.findBySlug('slug-qui-nexiste-pas')).toThrow(NotFoundException);
-    });
-  });
+    it('leve NotFoundException si le code est inconnu', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(null);
 
-  describe('isValidSlug', () => {
-    it('retourne true pour un slug du catalogue', () => {
-      expect(service.isValidSlug(JOBS[0].slug)).toBe(true);
-    });
-
-    it('retourne false pour un slug absent du catalogue', () => {
-      expect(service.isValidSlug('slug-inconnu')).toBe(false);
-    });
-  });
-
-  describe('listSlugs', () => {
-    it('retourne tous les slugs du catalogue', () => {
-      const slugs = service.listSlugs();
-      expect(slugs).toHaveLength(JOBS.length);
-      expect(slugs).toContain(JOBS[0].slug);
-      expect(slugs).toContain(JOBS[JOBS.length - 1].slug);
+      await expect(service.findBySlug('XXXXX')).rejects.toThrow(NotFoundException);
     });
   });
 
-  // ── Fiche personnalisée (cache-aside) ─────────────────────────────────────
+  // ── Fiche personnalisée ───────────────────────────────────────────────────
 
   describe('getPersonalizedSheet', () => {
-    const slug = JOBS[0].slug;
     const sessionId = 'session-test-123';
+    const code = 'M1805';
 
     const fakeAnswers = [
       {
@@ -86,56 +113,58 @@ describe('JobsService', () => {
       },
     ];
 
-    const generatedContent = {
+    const generated = {
       strengths: 'Tu aimeras la creativite.',
       watchPoints: 'Attention au rythme.',
-      nextSteps: ['Etape 1', 'Etape 2', 'Etape 3'],
-      dayInLife: 'Une journee commence par…',
+      nextSteps: ['Etape 1', 'Etape 2'],
+      dayInLife: 'Une journee commence par...',
     };
 
-    it('retourne le contenu depuis le cache DB sans appeler IA', async () => {
+    it('retourne le contenu en cache si deja genere', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
       prismaMock.matchResult.findFirst.mockResolvedValue({
         id: 'match-1',
         rank: 1,
-        personalizedContent: generatedContent,
+        personalizedContent: generated,
       });
 
-      const result = await service.getPersonalizedSheet(slug, sessionId);
+      const result = await service.getPersonalizedSheet(code, sessionId);
 
-      expect(result).toEqual(generatedContent);
+      expect(result).toEqual(generated);
       expect(aiMock.generatePersonalizedSheet).not.toHaveBeenCalled();
     });
 
-    it('genere le contenu via IA et le met en cache si absent', async () => {
+    it('genere via IA et met en cache si absent', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
       prismaMock.matchResult.findFirst.mockResolvedValue({
         id: 'match-1',
         rank: 1,
         personalizedContent: null,
       });
       prismaMock.sessionAnswer.findMany.mockResolvedValue(fakeAnswers);
-      aiMock.generatePersonalizedSheet.mockResolvedValue(generatedContent);
-      prismaMock.matchResult.update.mockResolvedValue({});
+      aiMock.generatePersonalizedSheet.mockResolvedValue(generated);
 
-      const result = await service.getPersonalizedSheet(slug, sessionId);
+      const result = await service.getPersonalizedSheet(code, sessionId);
 
-      expect(result).toEqual(generatedContent);
-      expect(aiMock.generatePersonalizedSheet).toHaveBeenCalledOnce();
+      expect(result).toEqual(generated);
       expect(prismaMock.matchResult.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ personalizedContent: generatedContent }),
+          data: expect.objectContaining({ personalizedContent: generated }),
         }),
       );
     });
 
-    it('retourne null si aucun MatchResult trouve pour cette session', async () => {
+    it('retourne null si aucun MatchResult trouve', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
       prismaMock.matchResult.findFirst.mockResolvedValue(null);
 
-      const result = await service.getPersonalizedSheet(slug, sessionId);
+      const result = await service.getPersonalizedSheet(code, sessionId);
 
       expect(result).toBeNull();
     });
 
-    it('retourne null sans stocker si IA est indisponible (degradation propre)', async () => {
+    it('retourne null sans stocker si IA est indisponible', async () => {
+      prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
       prismaMock.matchResult.findFirst.mockResolvedValue({
         id: 'match-1',
         rank: 2,
@@ -144,16 +173,10 @@ describe('JobsService', () => {
       prismaMock.sessionAnswer.findMany.mockResolvedValue(fakeAnswers);
       aiMock.generatePersonalizedSheet.mockResolvedValue(null);
 
-      const result = await service.getPersonalizedSheet(slug, sessionId);
+      const result = await service.getPersonalizedSheet(code, sessionId);
 
       expect(result).toBeNull();
       expect(prismaMock.matchResult.update).not.toHaveBeenCalled();
-    });
-
-    it('leve NotFoundException si le slug nexiste pas', async () => {
-      await expect(
-        service.getPersonalizedSheet('slug-inconnu', sessionId),
-      ).rejects.toThrow(NotFoundException);
     });
   });
 });

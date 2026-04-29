@@ -3,35 +3,22 @@ import { QuestionnaireService } from './questionnaire.service';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-// Catalogue reduit pour les tests (3 slugs suffisent)
-const SLUGS = ['dev-fullstack', 'data-analyst', 'product-manager'] as const;
-
 const jobsMock = {
-  listSlugs: vi.fn().mockReturnValue([...SLUGS]),
-  isValidSlug: vi.fn().mockImplementation((slug: string) =>
-    (SLUGS as readonly string[]).includes(slug),
-  ),
-  findBySlug: vi.fn().mockImplementation((slug: string) => ({
-    slug,
-    title: slug,
-    tagline: '',
-    summary: '',
-    missions: [],
-    skills: [],
-    formations: [],
-    salaryRangeHint: '',
-    workContext: '',
-  })),
+  findAll: vi.fn(),
+  findBySlug: vi.fn(),
+  getPersonalizedSheet: vi.fn(),
 };
 
 const aiMock = {
   adjustScores: vi.fn().mockResolvedValue(null),
   generateRationales: vi.fn().mockResolvedValue(null),
   chooseQuestion: vi.fn().mockResolvedValue(null),
-  extractWeightsFromText: vi.fn().mockResolvedValue(null),
 };
 
-// PrismaService non utilise dans les methodes testees ici
+const matchingMock = {
+  findBestJobs: vi.fn().mockResolvedValue([]),
+};
+
 const prismaMock = {} as any;
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -48,66 +35,31 @@ describe('QuestionnaireService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new QuestionnaireService(prismaMock, jobsMock as any, aiMock as any);
+    service = new QuestionnaireService(
+      prismaMock,
+      jobsMock as any,
+      aiMock as any,
+      matchingMock as any,
+    );
   });
 
-  // ── computeBaseScores ─────────────────────────────────────────────────────
+  // ── parseDomainWeights ────────────────────────────────────────────────────
 
-  describe('computeBaseScores', () => {
-    it('initialise tous les metiers a 0 quand il ny a aucune reponse', () => {
-      const result = priv(service).computeBaseScores([]);
-
-      expect(result).toEqual({
-        'dev-fullstack': 0,
-        'data-analyst': 0,
-        'product-manager': 0,
-      });
+  describe('parseDomainWeights', () => {
+    it('retourne null pour une valeur nulle ou non objet', () => {
+      expect(priv(service).parseDomainWeights(null)).toBeNull();
+      expect(priv(service).parseDomainWeights('truc')).toBeNull();
+      expect(priv(service).parseDomainWeights(42)).toBeNull();
     });
 
-    it('accumule les poids des options QCM', () => {
-      const answers = [
-        { option: { jobWeights: { 'dev-fullstack': 3, 'data-analyst': 1 } }, extractedWeights: null },
-        { option: { jobWeights: { 'dev-fullstack': 2 } }, extractedWeights: null },
-      ];
-
-      const result = priv(service).computeBaseScores(answers);
-
-      expect(result['dev-fullstack']).toBe(5);
-      expect(result['data-analyst']).toBe(1);
-      expect(result['product-manager']).toBe(0);
+    it('retourne null pour un objet sans valeur numerique valide', () => {
+      expect(priv(service).parseDomainWeights({ M: 'beaucoup', J: NaN })).toBeNull();
     });
 
-    it('accumule les poids extraits du texte libre', () => {
-      const answers = [
-        { option: null, extractedWeights: { 'data-analyst': 4, 'product-manager': 2 } },
-      ];
+    it('garde uniquement les valeurs numeriques valides', () => {
+      const result = priv(service).parseDomainWeights({ M: 3, J: NaN, K: 'oups', D: 2 });
 
-      const result = priv(service).computeBaseScores(answers);
-
-      expect(result['data-analyst']).toBe(4);
-      expect(result['product-manager']).toBe(2);
-    });
-
-    it('ignore les slugs absents du catalogue', () => {
-      const answers = [
-        { option: { jobWeights: { 'slug-inexistant': 99, 'dev-fullstack': 2 } }, extractedWeights: null },
-      ];
-
-      const result = priv(service).computeBaseScores(answers);
-
-      expect(Object.keys(result)).not.toContain('slug-inexistant');
-      expect(result['dev-fullstack']).toBe(2);
-    });
-
-    it('ignore les valeurs non numeriques dans les poids', () => {
-      const answers = [
-        { option: { jobWeights: { 'dev-fullstack': 'beaucoup', 'data-analyst': 3 } }, extractedWeights: null },
-      ];
-
-      const result = priv(service).computeBaseScores(answers);
-
-      expect(result['dev-fullstack']).toBe(0);
-      expect(result['data-analyst']).toBe(3);
+      expect(result).toEqual({ M: 3, D: 2 });
     });
   });
 
