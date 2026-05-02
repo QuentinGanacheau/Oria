@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
 import { AiService, type RationaleInput } from '../ai/ai.service';
@@ -188,6 +189,19 @@ export class QuestionnaireService {
       topDomainsCount: 3,
       finalTopN: 10,
     });
+
+    // null = IA totalement indisponible (quota, tous providers en erreur…)
+    // On lève un 503 : mieux vaut un message d'erreur honnête que des résultats
+    // sans pertinence (secrétaire médicale pour un profil dev…).
+    if (matched === null) {
+      this.logger.warn(
+        `Session ${sessionId} : matching impossible — IA indisponible.`,
+      );
+      throw new ServiceUnavailableException(
+        'Notre moteur de recommandation est temporairement indisponible. ' +
+          'Réessaie dans quelques minutes.',
+      );
+    }
 
     if (matched.length === 0) {
       this.logger.warn(

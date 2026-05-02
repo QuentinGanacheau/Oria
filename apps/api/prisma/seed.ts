@@ -1,10 +1,10 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 
 /**
- * Seed du questionnaire — Phase 2 : option mappées sur les grands domaines ROME.
+ * Seed du questionnaire — v2 : questionnaire enrichi 15 questions.
  *
- * Format des `domainWeights` : { "M": 3, "J": 2, ... } où la clé est le code
- * ROME du grand domaine (cf. nomenclature France Travail) :
+ * Format des `domainWeights` : { "M": 3, "J": 2, ... }
+ * Clés = codes grand domaine ROME (France Travail) :
  *   A — Agriculture, espaces naturels, soins aux animaux
  *   B — Arts et façonnage d'ouvrages d'art
  *   C — Banque, assurance, immobilier
@@ -20,9 +20,21 @@ import { Prisma, PrismaClient } from '@prisma/client';
  *   M — Support à l'entreprise (IT, RH, finance, conseil…)
  *   N — Transport, logistique
  *
- * NB — Le champ legacy `jobWeights` reste rempli (parfois vide) pour ne pas
- * casser le schéma. Il sera retiré après stabilisation de la nouvelle UX.
+ * Poids de référence :
+ *   5 = signal très fort (question très discriminante pour ce domaine)
+ *   4 = fort
+ *   3 = modéré
+ *   2 = faible
+ *   1 = signal additionnel
+ *
+ * Stratégie des questions conditionnelles :
+ *   - `trajectoire` (askIfNotEquals: { situation: lycee }) — pour actifs / étudiants / reconversion
+ *   - `secteur_lycee` (askIfEquals: { situation: lycee }) — pour les lycéens
+ *
+ * NB : le champ legacy `jobWeights` est conservé vide pour ne pas casser
+ * le schéma Prisma. Il sera retiré lors d'une prochaine migration.
  */
+
 type SeedQuestion = {
   key: string;
   text: string;
@@ -35,183 +47,523 @@ type SeedQuestion = {
   options: Array<{
     key: string;
     label: string;
-    /** Poids legacy (vide pour les nouvelles options). */
     jobWeights: Record<string, number>;
-    /** Poids des grands domaines ROME (Phase 2). */
     domainWeights: Record<string, number>;
   }>;
 };
 
 const QUESTIONS: SeedQuestion[] = [
-  // ── Question contextuelle (n'oriente pas le scoring) ───────────────────
+  // ── 1. Situation (contextuel — ne contribue pas au scoring) ────────────
   {
     key: 'situation',
-    text: 'Tu es plutôt…',
+    text: 'Pour commencer — tu es plutôt…',
     orderHint: 1,
     options: [
-      { key: 'lycee', label: 'Au lycée / en études courtes', jobWeights: {}, domainWeights: {} },
-      { key: 'etudes_longues', label: 'En études longues (Bac+3 et +)', jobWeights: {}, domainWeights: {} },
-      { key: 'reconversion', label: 'En reconversion professionnelle', jobWeights: {}, domainWeights: {} },
-      { key: 'actif', label: 'Déjà en poste et tu explores d’autres voies', jobWeights: {}, domainWeights: {} },
+      {
+        key: 'lycee',
+        label: 'Au lycée ou en études courtes (CAP, BTS…)',
+        jobWeights: {},
+        domainWeights: {},
+      },
+      {
+        key: 'etudes_longues',
+        label: 'En études longues (Bac+3 et plus)',
+        jobWeights: {},
+        domainWeights: {},
+      },
+      {
+        key: 'reconversion',
+        label: 'En reconversion professionnelle',
+        jobWeights: {},
+        domainWeights: {},
+      },
+      {
+        key: 'actif',
+        label: 'Déjà en poste et tu explores d\'autres voies',
+        jobWeights: {},
+        domainWeights: {},
+      },
     ],
   },
 
-  // ── Motivation ─────────────────────────────────────────────────────────
+  // ── 2. Domaine de passion — signal le plus fort sur le domaine ROME ───
+  //
+  // Utilise des codes sous-domaine ROME à 3 chars pour les options qui
+  // ciblent un sous-ensemble précis d'un grand domaine :
+  //   M18 = Systèmes d'information et télécommunications (IT, dev, data)
+  //   M11 = Comptabilité et gestion
+  //   M13 = Conseil et maîtrise d'ouvrage SI (consulting IT)
+  // Sans ces codes, "tech" pointerait vers tout M (compta, RH, météo…).
   {
-    key: 'energie',
-    text: 'Ce qui te motive le plus au travail…',
+    key: 'domaine_passion',
+    text: 'Quel domaine t\'attire vraiment — dans tes loisirs, tes études ou ta curiosité ?',
     orderHint: 2,
+    helperText: 'Choisis le plus fort, même si tu en as plusieurs.',
     options: [
       {
-        key: 'batir_produit',
-        label: 'Construire un produit ou un service tangible',
+        key: 'nature_vivant',
+        label: 'La nature, les animaux ou l\'environnement',
         jobWeights: {},
-        domainWeights: { M: 3, F: 2, H: 2, B: 1 },
+        domainWeights: { A: 5 },
       },
       {
-        key: 'donnees',
-        label: 'Comprendre des phénomènes grâce aux chiffres',
+        key: 'tech_numerique',
+        label: 'La tech, l\'informatique, les données',
         jobWeights: {},
-        domainWeights: { M: 4, C: 3 },
+        // M18 = sous-domaine IT/télécoms — évite de remonter compta, RH, météo
+        domainWeights: { M18: 5 },
       },
       {
-        key: 'humain',
-        label: 'Échanger avec des personnes et les convaincre',
+        key: 'humain_social',
+        label: 'L\'humain : la santé, le social ou l\'éducation',
         jobWeights: {},
-        domainWeights: { D: 4, K: 2, M: 1 },
+        domainWeights: { J: 3, K: 3 },
       },
       {
-        key: 'strategie',
-        label: 'Prioriser, arbitrer et faire avancer des projets',
+        key: 'creatif_artistique',
+        label: 'La création : art, culture, médias ou communication',
         jobWeights: {},
-        domainWeights: { M: 3, C: 1 },
+        domainWeights: { B: 3, E: 3, L: 2 },
+      },
+      {
+        key: 'btp_industrie',
+        label: 'La mécanique, l\'industrie, le bâtiment ou l\'énergie',
+        jobWeights: {},
+        domainWeights: { F: 3, H: 3, I: 3 },
+      },
+      {
+        key: 'commerce_entreprise',
+        label: 'L\'entreprise, le commerce ou la finance',
+        jobWeights: {},
+        // M11 = Comptabilité et gestion, M13 = Conseil et MOA SI
+        domainWeights: { D: 3, C: 3, M11: 2, M13: 1 },
       },
     ],
   },
 
-  // ── Environnement ──────────────────────────────────────────────────────
+  // ── 3. Cadre de travail ────────────────────────────────────────────────
   {
-    key: 'environnement',
-    text: 'Dans quel environnement tu t’épanouis le mieux ?',
+    key: 'cadre_travail',
+    text: 'Dans quel cadre tu t\'imagines travailler au quotidien ?',
     orderHint: 3,
     options: [
       {
-        key: 'tech_equipe',
-        label: 'Équipe tech / produit, rythme agile',
+        key: 'dehors_terrain',
+        label: 'En extérieur ou sur le terrain — pas de journées identiques',
         jobWeights: {},
-        domainWeights: { M: 4 },
+        domainWeights: { A: 3, F: 3, N: 2, I: 2 },
       },
       {
-        key: 'terrain_client',
-        label: 'Terrain, rendez-vous, négociation',
+        key: 'bureau_ecran',
+        label: 'En bureau ou en télétravail, face à un écran',
         jobWeights: {},
-        domainWeights: { D: 4, C: 2 },
+        domainWeights: { M: 3, C: 2, E: 2 },
       },
       {
-        key: 'structure',
-        label: 'Structure, process, cadre clair',
+        key: 'face_public',
+        label: 'En contact direct avec des clients, patients ou usagers',
         jobWeights: {},
-        domainWeights: { M: 3, C: 2, K: 1 },
+        domainWeights: { D: 3, J: 3, G: 2, K: 2 },
       },
       {
-        key: 'creatif',
-        label: 'Création, contenu, image de marque',
+        key: 'atelier_labo',
+        label: 'En atelier, laboratoire ou studio — un espace dédié',
         jobWeights: {},
-        domainWeights: { E: 4, B: 2, L: 1 },
+        domainWeights: { H: 3, B: 3, I: 2, J: 1 },
       },
     ],
   },
 
-  // ── Outils ─────────────────────────────────────────────────────────────
+  // ── 4. Manuel ou intellectuel ──────────────────────────────────────────
   {
-    key: 'outils',
-    text: 'Les outils qui t’attirent le plus…',
+    key: 'manuel_bureau',
+    text: 'Tu te vois plutôt…',
     orderHint: 4,
     options: [
-      { key: 'code', label: 'IDE, lignes de code, automatisation', jobWeights: {}, domainWeights: { M: 4 } },
-      { key: 'visuel', label: 'Maquettes, design, expérience utilisateur', jobWeights: {}, domainWeights: { E: 3, B: 2 } },
-      { key: 'tableurs_bi', label: 'Tableurs, requêtes SQL, dashboards', jobWeights: {}, domainWeights: { M: 4, C: 2 } },
-      { key: 'crm_docs', label: 'CRM, mails structurés, documentation métier', jobWeights: {}, domainWeights: { M: 3, D: 2 } },
+      {
+        key: 'tres_manuel',
+        label: 'Travailler de mes mains — construire, réparer, fabriquer',
+        jobWeights: {},
+        domainWeights: { F: 4, I: 4, H: 3, B: 2, A: 2 },
+      },
+      {
+        key: 'mixte',
+        label: 'Mélanger action physique et réflexion',
+        jobWeights: {},
+        domainWeights: { G: 2, D: 2, K: 2, J: 2, N: 2 },
+      },
+      {
+        key: 'intellectuel',
+        label: 'Analyser, réfléchir, résoudre des problèmes complexes',
+        jobWeights: {},
+        domainWeights: { M: 4, C: 3, E: 2 },
+      },
+      {
+        key: 'creatif_expression',
+        label: 'Créer et exprimer — dessin, texte, son, image…',
+        jobWeights: {},
+        domainWeights: { B: 4, L: 4, E: 3 },
+      },
     ],
   },
 
-  // ── Orientation concrète (pour non-lycéens) ────────────────────────────
+  // ── 5. Contact humain ──────────────────────────────────────────────────
   {
-    key: 'orientation_concrete',
-    text: 'Tu préfères…',
+    key: 'contact_humain',
+    text: 'Ton rapport idéal aux autres dans le travail…',
     orderHint: 5,
+    options: [
+      {
+        key: 'beaucoup_monde',
+        label: 'Beaucoup de monde — clients, public, patients au quotidien',
+        jobWeights: {},
+        domainWeights: { D: 3, G: 3, J: 3, K: 3 },
+      },
+      {
+        key: 'equipe_soudee',
+        label: 'Une équipe soudée avec qui je construis quelque chose',
+        jobWeights: {},
+        domainWeights: { M: 2, F: 2, H: 2, E: 2 },
+      },
+      {
+        key: 'peu_monde',
+        label: 'Peu de monde — concentration et autonomie avant tout',
+        jobWeights: {},
+        domainWeights: { A: 3, B: 3, M: 2 },
+      },
+      {
+        key: 'variable',
+        label: 'Variable — parfois seul, parfois en réunion ou sur le terrain',
+        jobWeights: {},
+        domainWeights: { N: 2, C: 2, I: 2, K: 1 },
+      },
+    ],
+  },
+
+  // ── 6. Ce qui compte le plus dans un métier ────────────────────────────
+  {
+    key: 'valeur_cle',
+    text: 'Ce qui compte le plus pour toi dans un métier…',
+    orderHint: 6,
+    helperText: 'Si tu ne devais retenir qu\'une chose.',
+    options: [
+      {
+        key: 'impact_sens',
+        label: 'Un impact concret sur les gens ou sur l\'environnement',
+        jobWeights: {},
+        domainWeights: { J: 3, K: 3, A: 2, E: 1 },
+      },
+      {
+        key: 'evolution_salaire',
+        label: 'Être bien payé et évoluer vite',
+        jobWeights: {},
+        domainWeights: { M: 4, C: 3, D: 2 },
+      },
+      {
+        key: 'creativite_liberte',
+        label: 'Liberté, créativité — faire les choses à ma façon',
+        jobWeights: {},
+        domainWeights: { B: 3, E: 3, L: 3, A: 1 },
+      },
+      {
+        key: 'securite_stabilite',
+        label: 'Sécurité d\'emploi, un cadre solide et prévisible',
+        jobWeights: {},
+        domainWeights: { K: 3, J: 2, C: 2, M: 1 },
+      },
+      {
+        key: 'apprendre_innover',
+        label: 'Apprendre en permanence, ne jamais faire deux fois la même chose',
+        jobWeights: {},
+        domainWeights: { M: 3, J: 2, I: 2, F: 1 },
+      },
+    ],
+  },
+
+  // ── 7. Rapport au salaire ──────────────────────────────────────────────
+  {
+    key: 'rapport_salaire',
+    text: 'Le salaire dans ton équation de vie…',
+    orderHint: 7,
+    options: [
+      {
+        key: 'salaire_priorite',
+        label: 'Priorité numéro 1 — je veux maximiser mes revenus',
+        jobWeights: {},
+        domainWeights: { M: 4, C: 3, D: 2 },
+      },
+      {
+        key: 'salaire_confort',
+        label: 'Important, mais pas le seul critère — je veux être à l\'aise',
+        jobWeights: {},
+        domainWeights: { M: 2, D: 2, J: 2, C: 1 },
+      },
+      {
+        key: 'salaire_secondaire',
+        label: 'Secondaire — l\'épanouissement et le sens passent avant',
+        jobWeights: {},
+        domainWeights: { A: 2, K: 2, J: 1, B: 1, L: 1 },
+      },
+    ],
+  },
+
+  // ── 8. Mobilité géographique ───────────────────────────────────────────
+  {
+    key: 'mobilite',
+    text: 'Ta mobilité géographique…',
+    orderHint: 8,
+    options: [
+      {
+        key: 'ancre_local',
+        label: 'Je veux rester dans ma région — ancrage local important',
+        jobWeights: {},
+        domainWeights: { K: 2, J: 2, F: 2, I: 2, A: 2 },
+      },
+      {
+        key: 'deplacements_ponctuels',
+        label: 'Des déplacements ponctuels OK, mais avec un QG fixe',
+        jobWeights: {},
+        domainWeights: { D: 2, M: 2, C: 2, G: 1 },
+      },
+      {
+        key: 'tres_mobile',
+        label: 'Toujours en mouvement — j\'aime changer d\'environnement',
+        jobWeights: {},
+        domainWeights: { N: 4, G: 3, D: 2 },
+      },
+      {
+        key: 'international',
+        label: 'L\'international m\'attire — voyager ou travailler à l\'étranger',
+        jobWeights: {},
+        domainWeights: { E: 3, M: 2, G: 2, D: 1 },
+      },
+    ],
+  },
+
+  // ── 9. Rythme de travail ───────────────────────────────────────────────
+  {
+    key: 'rythme',
+    text: 'Le rythme professionnel qui te convient…',
+    orderHint: 9,
+    options: [
+      {
+        key: 'horaires_fixes',
+        label: 'Horaires fixes et prévisibles — je déconnecte le soir',
+        jobWeights: {},
+        domainWeights: { K: 3, C: 2, H: 2, M: 1 },
+      },
+      {
+        key: 'flexible',
+        label: 'Flexible — je gère mon agenda selon mes missions',
+        jobWeights: {},
+        domainWeights: { M: 3, E: 2, B: 2, D: 1 },
+      },
+      {
+        key: 'intense_sprints',
+        label: 'Intense par cycles — je kiffe les deadlines et les sprints',
+        jobWeights: {},
+        domainWeights: { M: 3, D: 2, E: 2, N: 1 },
+      },
+      {
+        key: 'saisonnier',
+        label: 'Saisonnier ou à projets — des pics et des temps calmes',
+        jobWeights: {},
+        domainWeights: { A: 3, G: 3, L: 2, F: 1 },
+      },
+    ],
+  },
+
+  // ── 10. Compétence naturelle ────────────────────────────────────────────
+  {
+    key: 'competence_naturelle',
+    text: 'Ce dans quoi tu es naturellement à l\'aise, ton vrai point fort…',
+    orderHint: 10,
+    options: [
+      {
+        key: 'tech_outils',
+        label: 'La tech et les outils numériques — je comprends vite les systèmes',
+        jobWeights: {},
+        // M18 = sous-domaine IT/télécoms (confirmation du signal de domaine_passion)
+        domainWeights: { M18: 5, I: 2 },
+      },
+      {
+        key: 'relation_persuasion',
+        label: 'Le contact et la conviction — à l\'aise en face-à-face',
+        jobWeights: {},
+        domainWeights: { D: 3, G: 2, J: 2, K: 2 },
+      },
+      {
+        key: 'creation_expression',
+        label: 'La créativité et l\'expression — un vrai sens esthétique',
+        jobWeights: {},
+        domainWeights: { B: 4, E: 4, L: 3 },
+      },
+      {
+        key: 'organisation_rigueur',
+        label: 'L\'organisation et la rigueur — j\'aime que les choses soient bien faites',
+        jobWeights: {},
+        domainWeights: { M: 3, C: 3, N: 2, F: 1 },
+      },
+      {
+        key: 'habilete_manuelle',
+        label: 'L\'habileté manuelle et la précision physique',
+        jobWeights: {},
+        domainWeights: { F: 4, I: 4, H: 3, B: 2 },
+      },
+    ],
+  },
+
+  // ── 11. Rapport à la formation ─────────────────────────────────────────
+  {
+    key: 'formation',
+    text: 'Pour te lancer dans un métier, tu es prêt(e) à…',
+    orderHint: 11,
+    options: [
+      {
+        key: 'longues_etudes',
+        label: 'Des études longues (5 ans et +) si c\'est ce qu\'il faut',
+        jobWeights: {},
+        domainWeights: { J: 3, M: 2, C: 2, E: 1 },
+      },
+      {
+        key: 'formation_courte',
+        label: 'Une formation ciblée (1 à 3 ans, alternance, certif)',
+        jobWeights: {},
+        domainWeights: { I: 2, D: 2, F: 2, H: 2, M: 1 },
+      },
+      {
+        key: 'apprendre_terrain',
+        label: 'Apprendre directement sur le terrain, en faisant',
+        jobWeights: {},
+        domainWeights: { G: 3, A: 2, N: 2, F: 1, D: 1 },
+      },
+      {
+        key: 'autodidacte',
+        label: 'Me former seul(e) — tutos, projets perso, portfolio',
+        jobWeights: {},
+        domainWeights: { M: 3, E: 3, B: 2, L: 1 },
+      },
+    ],
+  },
+
+  // ── 12a. Trajectoire (non-lycéens) ─────────────────────────────────────
+  {
+    key: 'trajectoire',
+    text: 'Quelle trajectoire te ressemble le plus ?',
+    orderHint: 12,
     askIfNotEquals: { situation: 'lycee' },
     options: [
-      { key: 'livrer_feature', label: 'Livrer une fonctionnalité ou une analyse concrète', jobWeights: {}, domainWeights: { M: 3 } },
-      { key: 'pitch', label: 'Présenter, défendre une idée, closer', jobWeights: {}, domainWeights: { D: 3, M: 1, E: 1 } },
-      { key: 'cadre', label: 'Sécuriser le cadre (juridique, chiffré, RH)', jobWeights: {}, domainWeights: { M: 3, C: 2 } },
-      { key: 'vision', label: 'Définir la vision et coordonner les équipes', jobWeights: {}, domainWeights: { M: 3 } },
+      {
+        key: 'expert',
+        label: 'Devenir un expert reconnu dans mon domaine',
+        jobWeights: {},
+        domainWeights: { J: 3, M: 3, C: 2 },
+      },
+      {
+        key: 'entrepreneur',
+        label: 'Créer ou co-créer mon activité',
+        jobWeights: {},
+        domainWeights: { D: 3, M: 2, A: 2, B: 1 },
+      },
+      {
+        key: 'management',
+        label: 'Évoluer vers le management et les responsabilités',
+        jobWeights: {},
+        domainWeights: { M: 4, D: 2, K: 1 },
+      },
+      {
+        key: 'equilibre',
+        label: 'Un bon équilibre vie pro / vie perso — pas de course aux galons',
+        jobWeights: {},
+        domainWeights: { K: 3, A: 2, J: 2, G: 1 },
+      },
     ],
   },
 
-  // ── Conseil lycéens ────────────────────────────────────────────────────
+  // ── 12b. Secteur attractif (lycéens) ──────────────────────────────────
   {
-    key: 'conseil_lycee',
-    text: 'En ce moment, tu aimerais surtout…',
-    orderHint: 6,
+    key: 'secteur_lycee',
+    text: 'Si tu devais choisir un grand secteur pour ton avenir, tu pencherais vers…',
+    orderHint: 13,
     askIfEquals: { situation: 'lycee' },
     options: [
-      { key: 'decouvrir_num', label: 'Découvrir les métiers du numérique', jobWeights: {}, domainWeights: { M: 3 } },
-      { key: 'aider_gens', label: 'Travailler avec et pour les gens', jobWeights: {}, domainWeights: { K: 3, J: 2, M: 1 } },
-      { key: 'organiser', label: 'Organiser, planifier, rendre les choses claires', jobWeights: {}, domainWeights: { M: 2, K: 1 } },
-      { key: 'creer', label: 'Créer (contenu, visuel, idées)', jobWeights: {}, domainWeights: { E: 3, B: 2, L: 1 } },
+      {
+        key: 'sante_social',
+        label: 'La santé, le médico-social ou l\'éducation',
+        jobWeights: {},
+        domainWeights: { J: 4, K: 3 },
+      },
+      {
+        key: 'tech_num_lycee',
+        label: 'La tech, l\'informatique ou le numérique',
+        jobWeights: {},
+        domainWeights: { M18: 5 },
+      },
+      {
+        key: 'creation_culture',
+        label: 'La création, les arts ou la culture',
+        jobWeights: {},
+        domainWeights: { B: 4, E: 3, L: 3 },
+      },
+      {
+        key: 'btp_nature_lycee',
+        label: 'Le BTP, l\'industrie, la nature ou l\'agriculture',
+        jobWeights: {},
+        domainWeights: { F: 3, H: 3, A: 3, I: 2 },
+      },
+      {
+        key: 'commerce_tourisme',
+        label: 'Le commerce, la gestion, le tourisme ou la restauration',
+        jobWeights: {},
+        domainWeights: { D: 3, G: 3, C: 2 },
+      },
     ],
   },
 
-  // ── Questions ouvertes (texte libre) ──────────────────────────────────
-  // Ces questions n'ont pas d'options. Le texte libre n'alimente pas le
-  // scoring par domaine, mais il est transmis tel quel à l'IA pour le
-  // reranking final — où il a son maximum d'impact.
+  // ── 13. Journée idéale (texte libre) ──────────────────────────────────
+  // Le texte libre est transmis tel quel à l'IA pour le reranking final.
+  // Il ne génère pas de domainWeights — son impact est qualitatif.
   {
     key: 'journee_ideale',
-    text: 'Raconte une journée (passée ou imaginée) où tu t\'es senti pleinement à ta place. Que faisais-tu ? Avec qui ? Qu\'est-ce qui la rendait bonne ?',
-    orderHint: 10,
+    text: 'Décris une journée (passée ou imaginée) où tu t\'es senti(e) pleinement à ta place. Que faisais-tu ? Avec qui ? Qu\'est-ce qui la rendait bonne ?',
+    orderHint: 20,
     type: 'FREE_TEXT',
     placeholder: 'Ex : "J\'organisais un évènement pour l\'asso, je coordonnais les bénévoles, je voyais les gens sourire..."',
-    helperText: 'Plus tu es concret et personnel, mieux c\'est. 2 à 5 phrases suffisent.',
+    helperText: 'Plus tu es concret(e) et personnel(le), mieux c\'est. 2 à 5 phrases suffisent.',
     options: [],
   },
+
+  // ── 14. Irritants (texte libre) ────────────────────────────────────────
   {
     key: 'irritants',
     text: 'À l\'inverse, qu\'est-ce qui te gonfle ou t\'épuise dans un boulot, dans les études ou en groupe ?',
-    orderHint: 11,
+    orderHint: 21,
     type: 'FREE_TEXT',
     placeholder: 'Ex : "Faire la même tâche répétitive, les réunions sans décision, travailler seul devant un écran..."',
     helperText: 'Les choses à éviter en disent autant que celles qu\'on aime.',
     options: [],
   },
+
+  // ── 15. Fascination (texte libre) ──────────────────────────────────────
   {
     key: 'fascination',
     text: 'Un métier, une personne dont tu admires le travail, ou une activité qui te fascine — et pourquoi ?',
-    orderHint: 12,
+    orderHint: 22,
     type: 'FREE_TEXT',
     placeholder: 'Ex : "Ma cousine est sage-femme, j\'adore qu\'elle aide les gens dans un moment important..."',
     helperText: 'Même si ce n\'est pas un métier que tu veux faire, explique ce qui t\'attire.',
     options: [],
-  },
-
-  // ── Contrainte ─────────────────────────────────────────────────────────
-  {
-    key: 'contrainte',
-    text: 'Contrainte importante pour toi…',
-    orderHint: 7,
-    options: [
-      { key: 'remote', label: 'Télétravail / flexibilité', jobWeights: {}, domainWeights: { M: 1, E: 1 } },
-      { key: 'impact', label: 'Impact visible rapidement', jobWeights: {}, domainWeights: { D: 2, E: 1, M: 1 } },
-      { key: 'stabilite', label: 'Stabilité et pérennité du métier', jobWeights: {}, domainWeights: { M: 2, C: 2, K: 1, J: 1 } },
-      { key: 'apprendre', label: 'Apprendre en continu des choses nouvelles', jobWeights: {}, domainWeights: { M: 2 } },
-    ],
   },
 ];
 
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
   try {
+    // Désactiver toutes les anciennes questions avant de seeder
+    // (les nouvelles seront upsertées avec active: true)
+    await prisma.question.updateMany({ data: { active: false } });
+    console.log('Anciennes questions désactivées.');
+
     for (const question of QUESTIONS) {
       const upserted = await prisma.question.upsert({
         where: { key: question.key },
@@ -268,8 +620,11 @@ async function main(): Promise<void> {
           },
         });
       }
+
+      console.log(`  ✓ ${question.key}`);
     }
-    console.log('✓ Seed terminé.');
+
+    console.log('\n✓ Seed terminé — 15 questions actives.');
   } finally {
     await prisma.$disconnect();
   }

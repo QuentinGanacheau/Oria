@@ -16,13 +16,22 @@ export class JobRankerService {
 
   constructor(private readonly ai: AiService) {}
 
+  /**
+   * Reranke les candidats avec l'IA et retourne les résultats triés.
+   *
+   * Retourne `null` si l'IA est totalement indisponible (quota dépassé,
+   * tous les providers en erreur…). L'appelant décide alors quoi faire :
+   * afficher une erreur plutôt que des résultats aléatoires sans valeur.
+   *
+   * Ne produit plus de fallback local : sans IA, le domaine ROME seul
+   * n'est pas assez précis pour garantir des résultats pertinents.
+   */
   async rank(
     candidates: JobCandidate[],
     answers: MatchingAnswer[],
-  ): Promise<MatchedJob[]> {
+  ): Promise<MatchedJob[] | null> {
     if (candidates.length === 0) return [];
 
-    // Tentative IA (peut retourner null si indisponible / échec)
     const aiScores = await this.ai.rankJobsForProfile({
       candidates: candidates.map((c) => ({
         code: c.code,
@@ -35,10 +44,8 @@ export class JobRankerService {
     });
 
     if (!aiScores) {
-      this.logger.warn(
-        'IA indisponible pour le reranking — fallback ordre brut.',
-      );
-      return this.fallbackRanking(candidates);
+      this.logger.warn('IA indisponible pour le reranking — résultat null.');
+      return null;
     }
 
     // Construit le résultat trié par score IA décroissant
@@ -52,19 +59,6 @@ export class JobRankerService {
 
     return ranked.map((job, index) => ({
       ...job,
-      rank: index + 1,
-    }));
-  }
-
-  /**
-   * Fallback : ordre d'entrée préservé, score uniforme à 50.
-   * On évite de mettre 0 (psychologiquement décourageant).
-   */
-  private fallbackRanking(candidates: JobCandidate[]): MatchedJob[] {
-    return candidates.map((c, index) => ({
-      code: c.code,
-      libelle: c.libelle,
-      score: 50,
       rank: index + 1,
     }));
   }

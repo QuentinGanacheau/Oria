@@ -51,7 +51,7 @@ describe('MatchingService', () => {
     expect(result).toEqual([]);
   });
 
-  it('passe les top domaines au filtre Prisma', async () => {
+  it('fait un appel Prisma par domaine retenu', async () => {
     prismaMock.romeJob.findMany.mockResolvedValue([]);
 
     await service.findBestJobs(
@@ -59,10 +59,14 @@ describe('MatchingService', () => {
       { topDomainsCount: 2 },
     );
 
+    // M (score 10) et K (score 8) retenus — seuil 10*0.40=4, A=1 exclu.
+    // Un appel Prisma par domaine (grand domaine 1 char -> codeGrandDomaine).
+    expect(prismaMock.romeJob.findMany).toHaveBeenCalledTimes(2);
     expect(prismaMock.romeJob.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { codeGrandDomaine: { in: ['M', 'K'] } },
-      }),
+      expect.objectContaining({ where: { codeGrandDomaine: 'M' } }),
+    );
+    expect(prismaMock.romeJob.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { codeGrandDomaine: 'K' } }),
     );
   });
 
@@ -82,12 +86,14 @@ describe('MatchingService', () => {
       finalTopN: 2,
     });
 
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ code: 'M1801', score: 92, rank: 1 });
-    expect(result[1]).toMatchObject({ code: 'M1805', score: 78, rank: 2 });
+    // IA disponible : result est non-null
+    expect(result).not.toBeNull();
+    expect(result!).toHaveLength(2);
+    expect(result![0]).toMatchObject({ code: 'M1801', score: 92, rank: 1 });
+    expect(result![1]).toMatchObject({ code: 'M1805', score: 78, rank: 2 });
   });
 
-  it('utilise le fallback si IA indisponible (rankJobsForProfile renvoie null)', async () => {
+  it('retourne null si IA totalement indisponible (pas de fallback bidon)', async () => {
     prismaMock.romeJob.findMany.mockResolvedValue([
       { code: 'M1805', libelle: 'Etudes informatique', codeGrandDomaine: 'M' },
       { code: 'M1801', libelle: 'Architecture SI', codeGrandDomaine: 'M' },
@@ -96,9 +102,7 @@ describe('MatchingService', () => {
 
     const result = await service.findBestJobs([buildAnswer({ M: 5 })]);
 
-    expect(result).toHaveLength(2);
-    // Fallback : score uniforme à 50, ordre d'entrée préservé
-    expect(result[0]).toMatchObject({ code: 'M1805', score: 50, rank: 1 });
-    expect(result[1]).toMatchObject({ code: 'M1801', score: 50, rank: 2 });
+    // Sans IA : null pour signaler l'indisponibilite, pas de resultats alea
+    expect(result).toBeNull();
   });
 });
