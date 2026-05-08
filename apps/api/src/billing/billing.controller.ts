@@ -16,6 +16,7 @@ export class BillingController {
     return this.billing.createFullReportCheckout({
       successPath: body.successPath,
       cancelPath: body.cancelPath,
+      sessionId: body.sessionId,
     });
   }
 

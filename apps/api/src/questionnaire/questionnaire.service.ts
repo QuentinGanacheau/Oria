@@ -250,12 +250,16 @@ export class QuestionnaireService {
     }));
 
     // 5. Persistance : on remplace tous les anciens MatchResult de la session
+    // L'expiration à 30 jours démarre maintenant (depuis la fin du questionnaire).
+    // Elle sera prolongée à 1 an si l'utilisateur paie (cf. BillingService).
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
     await this.prisma.$transaction([
       this.prisma.matchResult.deleteMany({ where: { sessionId } }),
       this.prisma.matchResult.createMany({
         data: detailedMatches.map((m, index) => ({
           sessionId,
-          jobSlug: m.job.slug, // Code ROME stocké comme identifiant
+          jobSlug: m.job.slug,
           score: m.score,
           rank: index + 1,
           rationale: finalMatches[index].rationale,
@@ -263,11 +267,73 @@ export class QuestionnaireService {
       }),
       this.prisma.questionnaireSession.update({
         where: { id: sessionId },
-        data: { status: SessionStatus.COMPLETED },
+        data: { status: SessionStatus.COMPLETED, expiresAt },
       }),
     ]);
 
     return { sessionId, matches: finalMatches };
+  }
+
+  /**
+   * Restaure les résultats d'une session depuis la DB via un lien email.
+   *
+   * Sécurité : l'email fourni doit correspondre exactement à celui de la session
+   * (vérification anti-partage de lien). Utiliser toLowerCase() des deux côtés
+   * pour éviter les problèmes de casse.
+   *
+   * Retourne un objet identique à ce que le frontend stocke dans localStorage :
+   * matches + isPaid + expiresAt pour permettre la restauration complète.
+   */
+  async restoreSession(sessionId: string, email: string) {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        matches: { orderBy: { rank: 'asc' } },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session introuvable.');
+    }
+
+    // Pas d'email en DB = l'utilisateur avait skipé → pas de restauration
+    if (!session.email) {
+      throw new BadRequestException(
+        'Aucun email associé à cette session. La restauration nécessite un email.',
+      );
+    }
+
+    // Anti-partage : l'email doit correspondre
+    if (session.email.toLowerCase() !== email.toLowerCase().trim()) {
+      throw new BadRequestException('Email incorrect.');
+    }
+
+    // Vérification de l'expiration
+    if (session.expiresAt && new Date() > session.expiresAt) {
+      throw new BadRequestException(
+        'Ces résultats ont expiré. Lance un nouveau questionnaire pour une analyse fraîche.',
+      );
+    }
+
+    // Hydrate les résultats avec les détails complets du job
+    const matches = await Promise.all(
+      session.matches.map(async (m) => {
+        const job = await this.jobs.findBySlug(m.jobSlug);
+        return {
+          job,
+          score: m.score,
+          scorePercent: Math.round(m.score),
+          rationale: m.rationale ?? null,
+        };
+      }),
+    );
+
+    return {
+      sessionId: session.id,
+      matches,
+      isPaid: session.isPaid,
+      expiresAt: session.expiresAt?.toISOString() ?? null,
+    };
   }
 
   /** Parse défensif du JSON `domainWeights` venant de la DB. */

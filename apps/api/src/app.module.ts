@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
+import { EmailModule } from './email/email.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { JobsModule } from './jobs/jobs.module';
 import { MatchingModule } from './matching/matching.module';
@@ -17,6 +18,7 @@ import { BillingModule } from './billing/billing.module';
     BillingModule,
     FeedbackModule,
     MatchingModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [],

@@ -53,10 +53,26 @@ model QuestionnaireSession {
   id        String          @id @default(cuid())
   status    SessionStatus   @default(ACTIVE)
   metadata  Json?
+  /// Email de l'utilisateur, capturé avant l'affichage des résultats.
+  /// Null si l'utilisateur a skipé la capture → pas de restauration possible.
+  email        String?
+  /// Consentement RGPD explicite à recevoir les emails.
+  emailConsent Boolean      @default(false)
+  /// Paiement confirmé via Stripe — permet de restaurer le statut "débloqué"
+  /// quand l'utilisateur revient via le lien email sans localStorage.
+  isPaid       Boolean      @default(false)
+  /// Date d'expiration de la session (accès aux résultats via lien email).
+  /// null = pas d'expiration (théorique)
+  /// Valeurs définies à la complétion :
+  ///   - Gratuit  → now + 30 jours
+  ///   - Payant   → now + 1 an (prolongé à la confirmation de paiement)
+  expiresAt    DateTime?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   answers   SessionAnswer[]
   matches   MatchResult[]
+
+  @@index([email])
 }
 
 model SessionAnswer {
@@ -137,4 +153,28 @@ model FeedbackEvent {
 
   @@index([sessionId])
   @@index([eventType])
+}
+
+/// Trace de tous les emails envoyés depuis l'app.
+/// Permet d'auditer la délivrabilité, de retrouver un envoi spécifique en cas
+/// de support utilisateur, et d'éviter les doubles envois.
+model EmailLog {
+  id         String   @id @default(cuid())
+  sessionId  String?
+  /// Adresse destinataire (en clair — déjà fournie par l'utilisateur).
+  to         String
+  /// Type d'email pour faciliter le filtrage et le débogage.
+  /// Valeurs : "results" | "payment_confirmation" | "unlock_reminder"
+  type       String
+  /// "sent" | "failed"
+  status     String
+  /// ID retourné par Resend, utile pour retrouver le mail dans leur dashboard.
+  providerId String?
+  /// Message d'erreur si status = "failed" (raison de l'échec).
+  error      String?
+  sentAt     DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([to])
+  @@index([type])
 }

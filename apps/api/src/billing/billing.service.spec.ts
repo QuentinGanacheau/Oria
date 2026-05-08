@@ -24,6 +24,18 @@ vi.mock('stripe', () => {
   };
 });
 
+// ─── Mocks Prisma & Email (ajoutés pour la confirmation post-paiement) ───────
+
+const prismaMock = {
+  questionnaireSession: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
+};
+
+const emailMock = {
+  sendPaymentConfirmation: vi.fn().mockResolvedValue(true),
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const buildConfig = (overrides: Record<string, string | undefined> = {}) => {
@@ -38,6 +50,18 @@ const buildConfig = (overrides: Record<string, string | undefined> = {}) => {
   };
 };
 
+/**
+ * Construit un BillingService avec ses 3 dépendances. Les mocks Prisma et
+ * Email sont partagés (réinitialisés via vi.clearAllMocks dans beforeEach)
+ * — les tests existants n'ont pas à se soucier de ces nouvelles dépendances.
+ */
+const makeService = (config: ReturnType<typeof buildConfig>) =>
+  new BillingService(
+    config as any,
+    prismaMock as any,
+    emailMock as any,
+  );
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('BillingService', () => {
@@ -49,13 +73,13 @@ describe('BillingService', () => {
 
   describe('isEnabled', () => {
     it('retourne true quand Stripe est configuré et le priceId présent', () => {
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       expect(service.isEnabled()).toBe(true);
     });
 
     it('retourne false quand STRIPE_SECRET_KEY est absent', () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_SECRET_KEY: undefined }) as any,
       );
 
@@ -63,7 +87,7 @@ describe('BillingService', () => {
     });
 
     it('retourne false quand STRIPE_PRICE_FULL_REPORT est absent', () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_PRICE_FULL_REPORT: undefined }) as any,
       );
 
@@ -71,7 +95,7 @@ describe('BillingService', () => {
     });
 
     it('retourne false quand les deux variables sont absentes', () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({
           STRIPE_SECRET_KEY: undefined,
           STRIPE_PRICE_FULL_REPORT: undefined,
@@ -87,7 +111,7 @@ describe('BillingService', () => {
   describe('createFullReportCheckout', () => {
     it('retourne l URL de session Stripe en cas nominal', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       const result = await service.createFullReportCheckout({});
 
@@ -96,7 +120,7 @@ describe('BillingService', () => {
 
     it('appelle stripe.checkout.sessions.create avec les bons paramètres', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await service.createFullReportCheckout({
         successPath: '/resultats',
@@ -113,7 +137,7 @@ describe('BillingService', () => {
 
     it('construit les URL avec des chemins commençant par /', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await service.createFullReportCheckout({
         successPath: '/success',
@@ -127,7 +151,7 @@ describe('BillingService', () => {
 
     it('préfixe un / au chemin quand il ne commence pas par /', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await service.createFullReportCheckout({
         successPath: 'success',
@@ -141,7 +165,7 @@ describe('BillingService', () => {
 
     it('utilise /resultats comme chemin par défaut quand successPath et cancelPath sont omis', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await service.createFullReportCheckout({});
 
@@ -152,7 +176,7 @@ describe('BillingService', () => {
 
     it('supprime le slash final de FRONTEND_URL avant de concaténer', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ FRONTEND_URL: 'http://localhost:3000/' }) as any,
       );
 
@@ -164,7 +188,7 @@ describe('BillingService', () => {
 
     it('utilise http://localhost:3000 comme base par défaut quand FRONTEND_URL est absent', async () => {
       mockSessionCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/pay/abc' });
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ FRONTEND_URL: undefined }) as any,
       );
 
@@ -175,7 +199,7 @@ describe('BillingService', () => {
     });
 
     it('lève ServiceUnavailableException avec code STRIPE_DISABLED quand Stripe n est pas configuré', async () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_SECRET_KEY: undefined }) as any,
       );
 
@@ -185,7 +209,7 @@ describe('BillingService', () => {
     });
 
     it('inclut le code STRIPE_DISABLED dans l exception quand Stripe est absent', async () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_SECRET_KEY: undefined }) as any,
       );
 
@@ -195,7 +219,7 @@ describe('BillingService', () => {
     });
 
     it('lève ServiceUnavailableException avec code STRIPE_PRICE_MISSING quand le priceId est absent', async () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_PRICE_FULL_REPORT: undefined }) as any,
       );
 
@@ -206,7 +230,7 @@ describe('BillingService', () => {
 
     it('lève ServiceUnavailableException quand la session Stripe n a pas d URL', async () => {
       mockSessionCreate.mockResolvedValue({ url: null });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await expect(service.createFullReportCheckout({})).rejects.toThrow(
         ServiceUnavailableException,
@@ -219,7 +243,7 @@ describe('BillingService', () => {
   describe('verifyPaidSession', () => {
     it('retourne paid: true quand payment_status est paid', async () => {
       mockSessionRetrieve.mockResolvedValue({ payment_status: 'paid' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       const result = await service.verifyPaidSession('cs_test_abc');
 
@@ -228,7 +252,7 @@ describe('BillingService', () => {
 
     it('retourne paid: false quand payment_status est unpaid', async () => {
       mockSessionRetrieve.mockResolvedValue({ payment_status: 'unpaid' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       const result = await service.verifyPaidSession('cs_test_abc');
 
@@ -237,7 +261,7 @@ describe('BillingService', () => {
 
     it('retourne paid: false quand payment_status est no_payment_required', async () => {
       mockSessionRetrieve.mockResolvedValue({ payment_status: 'no_payment_required' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       const result = await service.verifyPaidSession('cs_test_abc');
 
@@ -245,7 +269,7 @@ describe('BillingService', () => {
     });
 
     it('retourne paid: false sans appeler Stripe quand Stripe n est pas configuré', async () => {
-      const service = new BillingService(
+      const service = makeService(
         buildConfig({ STRIPE_SECRET_KEY: undefined }) as any,
       );
 
@@ -257,7 +281,7 @@ describe('BillingService', () => {
 
     it('transmet le sessionId à stripe.checkout.sessions.retrieve', async () => {
       mockSessionRetrieve.mockResolvedValue({ payment_status: 'paid' });
-      const service = new BillingService(buildConfig() as any);
+      const service = makeService(buildConfig() as any);
 
       await service.verifyPaidSession('cs_test_xyz');
 
