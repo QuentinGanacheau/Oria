@@ -1,0 +1,25 @@
+node_modules
+dist
+.next
+.env
+.env.local
+*.log
+.DS_Store
+coverage
+.turbo
+
+# Bases de données locales
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal
+
+# Variables d'environnement (contiennent les clés API !)
+apps/api/.env
+apps/web/.env*
+
+# Build outputs
+apps/api/dist/
+apps/web/.next/
+
+# Divers
+*.tsbuildinfo
+coverage/g

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma *)",
+      "Bash(cat vitest.config.ts)",
+      "Bash(cat vitest.config.js)",
+      "Bash(npx vitest *)"
+    ]
+  }
+}
