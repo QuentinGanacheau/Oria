@@ -25,6 +25,12 @@ model Question {
   active         Boolean          @default(true)
   askIfEquals    Json?
   askIfNotEquals Json?
+  /// Affiche la question si la réponse à la clé EST dans le tableau.
+  /// Ex : { "situation": ["actif", "reconversion"] }
+  askIfIn        Json?
+  /// Affiche la question si la réponse à la clé N'EST PAS dans le tableau.
+  /// Ex : { "situation": ["lycee", "etudes_longues"] }
+  askIfNotIn     Json?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   options        QuestionOption[]

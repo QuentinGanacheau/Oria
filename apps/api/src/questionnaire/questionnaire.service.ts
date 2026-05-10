@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
 import { AiService, type RationaleInput } from '../ai/ai.service';
+import { deriveUserContext } from '../ai/user-context';
 import { JobsService, type JobProfile } from '../jobs/jobs.service';
 import { MatchingService } from '../matching/matching.service';
 import type { MatchingAnswer } from '../matching/matching.types';
@@ -19,6 +20,17 @@ type PublicQuestion = {
   placeholder?: string;
   helperText?: string;
   options: { id: string; label: string }[];
+};
+
+type Progress = {
+  /** Nombre de questions déjà répondues dans cette session. */
+  answered: number;
+  /**
+   * Total de questions attendues pour ce parcours (calculé dynamiquement
+   * selon la situation de l'utilisateur, donc le track A ou B).
+   * Null si le parcours n'est pas encore déterminé (avant la question `situation`).
+   */
+  total: number | null;
 };
 
 const MAX_FREE_TEXT_LENGTH = 2000;
@@ -54,8 +66,13 @@ export class QuestionnaireService {
           : ({} as Prisma.InputJsonValue),
       },
     });
-    const next = await this.getNextQuestionForSession(session.id);
-    return { sessionId: session.id, complete: next === null, question: next };
+    const { question, progress } = await this.getNextQuestionForSession(session.id);
+    return {
+      sessionId: session.id,
+      complete: question === null,
+      question,
+      progress,
+    };
   }
 
   async answerAndGetNext(input: {
@@ -72,22 +89,22 @@ export class QuestionnaireService {
       throw new BadRequestException('La session est déjà terminée.');
     }
 
-    const question = await this.prisma.question.findUnique({
+    const currentQuestion = await this.prisma.question.findUnique({
       where: { key: input.questionKey },
       include: { options: true },
     });
-    if (!question || !question.active) {
+    if (!currentQuestion || !currentQuestion.active) {
       throw new BadRequestException('Question invalide.');
     }
 
-    if (question.type === 'FREE_TEXT') {
-      await this.saveFreeTextAnswer(session.id, question, input.freeText);
+    if (currentQuestion.type === 'FREE_TEXT') {
+      await this.saveFreeTextAnswer(session.id, currentQuestion, input.freeText);
     } else {
-      await this.saveOptionAnswer(session.id, question, input.optionKey);
+      await this.saveOptionAnswer(session.id, currentQuestion, input.optionKey);
     }
 
-    const next = await this.getNextQuestionForSession(session.id);
-    return { complete: next === null, question: next };
+    const { question: nextQuestion, progress } = await this.getNextQuestionForSession(session.id);
+    return { complete: nextQuestion === null, question: nextQuestion, progress };
   }
 
   // ─── Sauvegarde des réponses ──────────────────────────────────────────────
@@ -184,10 +201,23 @@ export class QuestionnaireService {
       domainWeights: this.parseDomainWeights(a.option?.domainWeights ?? null),
     }));
 
-    // 2. Pipeline complet : scoring → fetch → reranking IA
+    // 2. Calcule le UserContext depuis la situation déclarée par l'utilisateur.
+    // Utilisé pour adapter les prompts IA (angle étudiant vs professionnel).
+    const situationAnswer = session.answers.find(
+      (a) => a.question.key === 'situation',
+    );
+    const situation = situationAnswer?.option?.key ?? 'actif';
+    const userContext = deriveUserContext(situation);
+
+    this.logger.log(
+      `Session ${sessionId} — track: ${userContext.track} (situation: ${situation})`,
+    );
+
+    // 3. Pipeline complet : scoring → fetch → reranking IA
     const matched = await this.matching.findBestJobs(matchingAnswers, {
       topDomainsCount: 3,
       finalTopN: 10,
+      userContext,
     });
 
     // null = IA totalement indisponible (quota, tous providers en erreur…)
@@ -227,7 +257,7 @@ export class QuestionnaireService {
       })),
     );
 
-    // 4. Génère les rationales IA pour le top 3
+    // 4. Génère les rationales IA pour le top 3 (avec contexte utilisateur)
     const rationaleInput: RationaleInput = {
       topJobs: detailedMatches.slice(0, 3).map((m) => ({
         slug: m.job.slug,
@@ -237,6 +267,7 @@ export class QuestionnaireService {
         question: a.question.text,
         answer: a.option?.label ?? a.freeText ?? '',
       })),
+      userContext,
     };
     const rationales = await this.ai.generateRationales(rationaleInput);
 
@@ -352,7 +383,7 @@ export class QuestionnaireService {
 
   private async getNextQuestionForSession(
     sessionId: string,
-  ): Promise<PublicQuestion | null> {
+  ): Promise<{ question: PublicQuestion | null; progress: Progress }> {
     const [questions, answers] = await Promise.all([
       this.prisma.question.findMany({
         where: { active: true },
@@ -373,10 +404,60 @@ export class QuestionnaireService {
 
     const candidates = questions.filter((question) => {
       if (answeredByKey.has(question.key)) return false;
-      if (!this.shouldAskQuestion(question, answeredByKey)) return false;
+      if (!this.shouldAskQuestion(
+        {
+          askIfEquals: question.askIfEquals,
+          askIfNotEquals: question.askIfNotEquals,
+          askIfIn: question.askIfIn,
+          askIfNotIn: question.askIfNotIn,
+        },
+        answeredByKey,
+      )) return false;
       return true;
     });
-    if (candidates.length === 0) return null;
+
+    // ── Calcul de la progression ───────────────────────────────────────────
+    // Le total est calculé dynamiquement : questions déjà répondues + questions
+    // encore à venir pour CE parcours. Null si la situation n'est pas encore connue
+    // (avant la Q1 "situation"), car on ne sait pas encore quel track sera affiché.
+    const situationAnswered = answeredByKey.has('situation');
+    const total: number | null = situationAnswered
+      ? answers.length + candidates.length
+      : null;
+
+    const progress: Progress = {
+      answered: answers.length,
+      total,
+    };
+
+    if (candidates.length === 0) {
+      return { question: null, progress };
+    }
+
+    // ── Garantie : `situation` est toujours posée en premier ───────────────
+    // `situation` détermine le track (étudiant vs professionnel) et conditionne
+    // toutes les questions askIfIn/askIfNotIn. Sans elle, le total du progress
+    // reste null et les questions de track ne sont jamais proposées.
+    // On la retourne directement sans passer par le tri IA.
+    if (!answeredByKey.has('situation')) {
+      const situationQ = candidates.find((q) => q.key === 'situation');
+      if (situationQ) {
+        return {
+          question: {
+            id: situationQ.key,
+            text: situationQ.text,
+            type: situationQ.type === 'FREE_TEXT' ? 'FREE_TEXT' : 'SINGLE_CHOICE',
+            placeholder: situationQ.placeholder ?? undefined,
+            helperText: situationQ.helperText ?? undefined,
+            options: situationQ.options.map((opt) => ({
+              id: opt.key,
+              label: opt.label,
+            })),
+          },
+          progress,
+        };
+      }
+    }
 
     const sortedCandidates = this.sortByDiscriminatoryPower(candidates);
     const shortlist = sortedCandidates.slice(0, 4);
@@ -390,40 +471,101 @@ export class QuestionnaireService {
     const chosen = shortlist.find((q) => q.key === aiChoice) ?? shortlist[0];
 
     return {
-      id: chosen.key,
-      text: chosen.text,
-      type: chosen.type === 'FREE_TEXT' ? 'FREE_TEXT' : 'SINGLE_CHOICE',
-      placeholder: chosen.placeholder ?? undefined,
-      helperText: chosen.helperText ?? undefined,
-      options: chosen.options.map((opt) => ({ id: opt.key, label: opt.label })),
+      question: {
+        id: chosen.key,
+        text: chosen.text,
+        type: chosen.type === 'FREE_TEXT' ? 'FREE_TEXT' : 'SINGLE_CHOICE',
+        placeholder: chosen.placeholder ?? undefined,
+        helperText: chosen.helperText ?? undefined,
+        options: chosen.options.map((opt) => ({ id: opt.key, label: opt.label })),
+      },
+      progress,
     };
   }
 
+  /**
+   * Détermine si une question doit être posée à l'utilisateur.
+   *
+   * Évalue les quatre conditions optionnelles dans l'ordre :
+   *   1. askIfEquals    — la réponse doit correspondre exactement à la valeur
+   *   2. askIfNotEquals — la réponse ne doit pas correspondre à la valeur
+   *   3. askIfIn        — la réponse doit être dans le tableau de valeurs
+   *   4. askIfNotIn     — la réponse ne doit pas être dans le tableau de valeurs
+   *
+   * Toutes les conditions présentes doivent être satisfaites (AND logique).
+   * Une question sans condition est toujours posée.
+   */
   private shouldAskQuestion(
-    question: { askIfEquals: unknown; askIfNotEquals: unknown },
+    question: {
+      askIfEquals: unknown;
+      askIfNotEquals: unknown;
+      askIfIn: unknown;
+      askIfNotIn: unknown;
+    },
     answeredByKey: Map<string, string>,
   ): boolean {
-    const askIfEquals = this.normalizeCondition(question.askIfEquals);
-    const askIfNotEquals = this.normalizeCondition(question.askIfNotEquals);
+    const askIfEquals = this.normalizeStringCondition(question.askIfEquals);
+    const askIfNotEquals = this.normalizeStringCondition(question.askIfNotEquals);
+    const askIfIn = this.normalizeArrayCondition(question.askIfIn);
+    const askIfNotIn = this.normalizeArrayCondition(question.askIfNotIn);
 
+    // La réponse doit être exactement la valeur attendue
     if (askIfEquals) {
       for (const [key, expected] of Object.entries(askIfEquals)) {
         if (answeredByKey.get(key) !== expected) return false;
       }
     }
+
+    // La réponse ne doit pas être la valeur bloquée
     if (askIfNotEquals) {
       for (const [key, blocked] of Object.entries(askIfNotEquals)) {
         if (answeredByKey.get(key) === blocked) return false;
       }
     }
+
+    // La réponse doit être dans le tableau de valeurs autorisées
+    if (askIfIn) {
+      for (const [key, allowedValues] of Object.entries(askIfIn)) {
+        const answer = answeredByKey.get(key);
+        if (!answer || !allowedValues.includes(answer)) return false;
+      }
+    }
+
+    // La réponse ne doit pas être dans le tableau de valeurs bloquées
+    if (askIfNotIn) {
+      for (const [key, blockedValues] of Object.entries(askIfNotIn)) {
+        const answer = answeredByKey.get(key);
+        if (answer && blockedValues.includes(answer)) return false;
+      }
+    }
+
     return true;
   }
 
-  private normalizeCondition(value: unknown): Record<string, string> | null {
+  /**
+   * Parse une condition de type chaîne : { key: "value" }.
+   * Retourne null si la valeur est absente ou malformée.
+   */
+  private normalizeStringCondition(value: unknown): Record<string, string> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const result: Record<string, string> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (typeof v === 'string') result[k] = v;
+    }
+    return Object.keys(result).length > 0 ? result : null;
+  }
+
+  /**
+   * Parse une condition de type tableau : { key: ["v1", "v2"] }.
+   * Filtre les entrées non-string pour rester défensif face à une DB corrompue.
+   */
+  private normalizeArrayCondition(value: unknown): Record<string, string[]> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const result: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (!Array.isArray(v)) continue;
+      const strings = v.filter((item): item is string => typeof item === 'string');
+      if (strings.length > 0) result[k] = strings;
     }
     return Object.keys(result).length > 0 ? result : null;
   }

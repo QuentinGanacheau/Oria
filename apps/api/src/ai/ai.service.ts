@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createAiProvider } from './providers/ai-provider.factory';
 import type { AiProvider } from './providers/ai-provider.interface';
+import { TRACK_INSTRUCTIONS, type UserContext } from './user-context';
 
 type SelectionInput = {
   candidateKeys: string[];
@@ -24,6 +25,8 @@ export type RationaleInput = {
   topJobs: Array<{ slug: string; title: string }>;
   /** Toutes les réponses de la session : texte de la question + valeur (label option ou texte libre). */
   answers: Array<{ question: string; answer: string }>;
+  /** Contexte utilisateur pour adapter le ton et l'angle d'analyse. */
+  userContext?: UserContext;
 };
 
 /**
@@ -196,9 +199,15 @@ export class AiService {
       .map((j) => `- ${j.slug} (${j.title})`)
       .join('\n');
 
+    const trackInstruction = input.userContext
+      ? TRACK_INSTRUCTIONS[input.userContext.track]
+      : TRACK_INSTRUCTIONS.professional;
+
     const prompt = [
       "Tu es un conseiller d'orientation bienveillant et direct.",
-      "Voici les réponses d'un utilisateur à un questionnaire d'orientation :",
+      trackInstruction,
+      '',
+      "Voici les réponses de l'utilisateur à un questionnaire d'orientation :",
       '',
       answersBlock,
       '',
@@ -326,6 +335,7 @@ export class AiService {
   async rankJobsForProfile(input: {
     candidates: Array<{ code: string; libelle: string }>;
     answers: Array<{ question: string; answer: string }>;
+    userContext?: UserContext;
   }): Promise<Record<string, number> | null> {
     if (!this.provider || input.candidates.length === 0) return null;
 
@@ -337,9 +347,15 @@ export class AiService {
       .map((a) => `- "${a.question}" → ${a.answer}`)
       .join('\n');
 
+    const trackInstruction = input.userContext
+      ? TRACK_INSTRUCTIONS[input.userContext.track]
+      : TRACK_INSTRUCTIONS.professional;
+
     const prompt = [
       "Tu es un conseiller d'orientation expert.",
-      "Voici les réponses d'un utilisateur à un questionnaire d'orientation :",
+      trackInstruction,
+      '',
+      "Voici les réponses de l'utilisateur à un questionnaire d'orientation :",
       '',
       answersBlock,
       '',

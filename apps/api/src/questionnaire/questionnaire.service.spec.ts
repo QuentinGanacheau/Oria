@@ -102,29 +102,106 @@ describe('QuestionnaireService', () => {
     });
   });
 
-  // ── normalizeCondition ────────────────────────────────────────────────────
+  // ── normalizeStringCondition ──────────────────────────────────────────────
 
-  describe('normalizeCondition', () => {
+  describe('normalizeStringCondition', () => {
     it('retourne null pour une valeur nulle', () => {
-      expect(priv(service).normalizeCondition(null)).toBeNull();
+      expect(priv(service).normalizeStringCondition(null)).toBeNull();
     });
 
     it('retourne null pour undefined', () => {
-      expect(priv(service).normalizeCondition(undefined)).toBeNull();
+      expect(priv(service).normalizeStringCondition(undefined)).toBeNull();
     });
 
     it('retourne null pour un tableau', () => {
-      expect(priv(service).normalizeCondition([])).toBeNull();
+      expect(priv(service).normalizeStringCondition([])).toBeNull();
     });
 
     it('retourne null pour un objet vide', () => {
-      expect(priv(service).normalizeCondition({})).toBeNull();
+      expect(priv(service).normalizeStringCondition({})).toBeNull();
     });
 
     it('retourne seulement les cles dont la valeur est une string', () => {
       const input = { a: 'valeur', b: 42, c: true, d: 'ok' };
 
-      expect(priv(service).normalizeCondition(input)).toEqual({ a: 'valeur', d: 'ok' });
+      expect(priv(service).normalizeStringCondition(input)).toEqual({ a: 'valeur', d: 'ok' });
+    });
+  });
+
+  // ── normalizeArrayCondition ───────────────────────────────────────────────
+
+  describe('normalizeArrayCondition', () => {
+    it('retourne null pour une valeur nulle', () => {
+      expect(priv(service).normalizeArrayCondition(null)).toBeNull();
+    });
+
+    it('retourne null pour un objet vide', () => {
+      expect(priv(service).normalizeArrayCondition({})).toBeNull();
+    });
+
+    it('retourne null si le tableau ne contient que des non-strings', () => {
+      expect(priv(service).normalizeArrayCondition({ situation: [1, true] })).toBeNull();
+    });
+
+    it('retourne les tableaux de strings valides', () => {
+      const input = { situation: ['actif', 'reconversion'] };
+      expect(priv(service).normalizeArrayCondition(input)).toEqual({
+        situation: ['actif', 'reconversion'],
+      });
+    });
+
+    it('filtre les valeurs non-string dans le tableau', () => {
+      const input = { situation: ['actif', 42, 'reconversion', true] };
+      expect(priv(service).normalizeArrayCondition(input)).toEqual({
+        situation: ['actif', 'reconversion'],
+      });
+    });
+  });
+
+  // ── shouldAskQuestion (askIfIn / askIfNotIn) ──────────────────────────────
+
+  describe('shouldAskQuestion avec askIfIn et askIfNotIn', () => {
+    const makeQ = (overrides: object) => ({
+      askIfEquals: null,
+      askIfNotEquals: null,
+      askIfIn: null,
+      askIfNotIn: null,
+      ...overrides,
+    });
+
+    it('askIfIn : retourne true si la reponse est dans le tableau', () => {
+      const answered = new Map([['situation', 'actif']]);
+      const q = makeQ({ askIfIn: { situation: ['actif', 'reconversion'] } });
+
+      expect(priv(service).shouldAskQuestion(q, answered)).toBe(true);
+    });
+
+    it('askIfIn : retourne false si la reponse nest pas dans le tableau', () => {
+      const answered = new Map([['situation', 'lycee']]);
+      const q = makeQ({ askIfIn: { situation: ['actif', 'reconversion'] } });
+
+      expect(priv(service).shouldAskQuestion(q, answered)).toBe(false);
+    });
+
+    it('askIfIn : retourne false si la question clee na pas encore de reponse', () => {
+      const answered = new Map<string, string>();
+      const q = makeQ({ askIfIn: { situation: ['actif', 'reconversion'] } });
+
+      expect(priv(service).shouldAskQuestion(q, answered)).toBe(false);
+    });
+
+    it('askIfNotIn : retourne true si la reponse nest pas dans le tableau bloque', () => {
+      const answered = new Map([['situation', 'lycee']]);
+      const q = makeQ({ askIfNotIn: { situation: ['actif', 'reconversion'] } });
+
+      expect(priv(service).shouldAskQuestion(q, answered)).toBe(true);
+    });
+
+    it('askIfNotIn : retourne false si la reponse est dans le tableau bloque', () => {
+      const answered = new Map([['situation', 'actif']]);
+      const q = makeQ({ askIfNotIn: { situation: ['actif', 'reconversion'] } });
+
+      expect(priv(service).shouldAskQuestion(q, answered)).toBe(false);
     });
   });
 
