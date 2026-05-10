@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model Question {
+  id             String           @id @default(cuid())
+  key            String           @unique
+  text           String
+  // "SINGLE_CHOICE" | "FREE_TEXT" (SQLite n'a pas d'enum, on stocke en string)
+  type           String           @default("SINGLE_CHOICE")
+  placeholder    String?
+  helperText     String?
+  orderHint      Int              @default(0)
+  active         Boolean          @default(true)
+  askIfEquals    Json?
+  askIfNotEquals Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  options        QuestionOption[]
+  answers        SessionAnswer[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  key        String
+  label      String
+  /// Poids des anciens slugs métier (legacy — sera supprimé après migration complète vers ROME).
+  jobWeights Json
+  /// Poids des grands domaines ROME (Phase 2). Format : { "M": 3, "J": 2, ... }
+  /// où la clé est le code ROME du grand domaine. Optionnel le temps de la migration.
+  domainWeights Json?
+  questionId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers    SessionAnswer[]
+
+  @@unique([questionId, key])
+}
+
+model QuestionnaireSession {
+  id        String          @id @default(cuid())
+  status    SessionStatus   @default(ACTIVE)
+  metadata  Json?
+  /// Email de l'utilisateur, capturé avant l'affichage des résultats.
+  /// Null si l'utilisateur a skipé la capture → pas de restauration possible.
+  email        String?
+  /// Consentement RGPD explicite à recevoir les emails.
+  emailConsent Boolean      @default(false)
+  /// Paiement confirmé via Stripe — permet de restaurer le statut "débloqué"
+  /// quand l'utilisateur revient via le lien email sans localStorage.
+  isPaid       Boolean      @default(false)
+  /// Date d'expiration de la session (accès aux résultats via lien email).
+  /// null = pas d'expiration (théorique)
+  /// Valeurs définies à la complétion :
+  ///   - Gratuit  → now + 30 jours
+  ///   - Payant   → now + 1 an (prolongé à la confirmation de paiement)
+  expiresAt    DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  answers   SessionAnswer[]
+  matches   MatchResult[]
+
+  @@index([email])
+}
+
+model SessionAnswer {
+  id                String               @id @default(cuid())
+  sessionId         String
+  questionId        String
+  // Réponse de type QCM : référence l'option choisie
+  optionId          String?
+  // Réponse de type texte libre
+  freeText          String?
+  // Poids métiers extraits par l'IA à partir du texte libre (cache pour éviter de rappeler l'IA)
+  extractedWeights  Json?
+  createdAt         DateTime             @default(now())
+  session           QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question          Question             @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  option            QuestionOption?      @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId])
+}
+
+model MatchResult {
+  id                 String               @id @default(cuid())
+  sessionId          String
+  jobSlug            String
+  score              Float
+  rank               Int
+  rationale          String?
+  // Fiche personnalisée générée à la demande (lazy) — null tant que l'utilisateur
+  // n'a pas visité la page fiche. Cache permanent : généré une fois, servi à l'infini.
+  personalizedContent Json?
+  createdAt          DateTime             @default(now())
+  session            QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, jobSlug]) // Lookup direct par session + métier
+}
+
+/// Métier importé depuis l'API ROME 4.0 de France Travail.
+/// Sert de source de données pour le matching (Phase 2). Mis à jour via
+/// le script `npm run sync:rome` qui appelle l'API et upsert toutes les fiches.
+model RomeJob {
+  id                     String   @id @default(cuid())
+  /// Code ROME unique (ex: "M1805") — identifiant officiel France Travail.
+  code                   String   @unique
+  libelle                String
+  definition             String?
+  /// Hiérarchie ROME — utilisée en Phase 2 pour le filtrage par grand domaine.
+  codeGrandDomaine       String?
+  libelleGrandDomaine    String?
+  codeDomaine            String?
+  libelleDomaine         String?
+  /// Compétences "savoirs" et "savoir-faire" stockées en JSON pour souplesse.
+  /// Format attendu : Array<{ libelle: string; code?: string; type?: string }>.
+  competencesSavoirs     Json?
+  competencesSavoirFaire Json?
+  /// Contextes de travail (lieux, conditions…) — JSON brut depuis l'API.
+  contextesTravail       Json?
+  /// Conditions d'accès au métier (niveau de diplôme, formations).
+  /// Texte libre extrait du champ `accesEmploi` de l'API ROME.
+  accesEmploi            String?
+  /// Date du dernier import — permet de détecter les fiches obsolètes.
+  syncedAt               DateTime @default(now())
+  createdAt              DateTime @default(now())
+
+  @@index([codeGrandDomaine])
+  @@index([codeDomaine])
+}
+
+model FeedbackEvent {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  eventType   String
+  rating      Int?
+  selectedJob String?
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([eventType])
+}
+
+/// Trace de tous les emails envoyés depuis l'app.
+/// Permet d'auditer la délivrabilité, de retrouver un envoi spécifique en cas
+/// de support utilisateur, et d'éviter les doubles envois.
+model EmailLog {
+  id         String   @id @default(cuid())
+  sessionId  String?
+  /// Adresse destinataire (en clair — déjà fournie par l'utilisateur).
+  to         String
+  /// Type d'email pour faciliter le filtrage et le débogage.
+  /// Valeurs : "results" | "payment_confirmation" | "unlock_reminder"
+  type       String
+  /// "sent" | "failed"
+  status     String
+  /// ID retourné par Resend, utile pour retrouver le mail dans leur dashboard.
+  providerId String?
+  /// Message d'erreur si status = "failed" (raison de l'échec).
+  error      String?
+  sentAt     DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([to])
+  @@index([type])
+}
