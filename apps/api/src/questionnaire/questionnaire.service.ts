@@ -6,7 +6,11 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
-import { AiService, type RationaleInput } from '../ai/ai.service';
+import {
+  AiService,
+  type PortraitContent,
+  type RationaleInput,
+} from '../ai/ai.service';
 import { deriveUserContext } from '../ai/user-context';
 import { JobsService, type JobProfile } from '../jobs/jobs.service';
 import { MatchingService } from '../matching/matching.service';
@@ -257,19 +261,30 @@ export class QuestionnaireService {
       })),
     );
 
-    // 4. Génère les rationales IA pour le top 3 (avec contexte utilisateur)
+    // 4. Génère les rationales et le portrait en parallèle (Phase 2 produit).
+    //    Les deux appels IA tournent en même temps via Promise.all : la latence
+    //    totale = max(rationales, portrait) au lieu de la somme.
+    const formattedAnswers = session.answers.map((a) => ({
+      question: a.question.text,
+      answer: a.option?.label ?? a.freeText ?? '',
+    }));
+
     const rationaleInput: RationaleInput = {
       topJobs: detailedMatches.slice(0, 3).map((m) => ({
         slug: m.job.slug,
         title: m.job.title,
       })),
-      answers: session.answers.map((a) => ({
-        question: a.question.text,
-        answer: a.option?.label ?? a.freeText ?? '',
-      })),
+      answers: formattedAnswers,
       userContext,
     };
-    const rationales = await this.ai.generateRationales(rationaleInput);
+
+    const [rationales, portrait] = await Promise.all([
+      this.ai.generateRationales(rationaleInput),
+      this.ai.generatePortrait({
+        answers: formattedAnswers,
+        userContext,
+      }),
+    ]);
 
     const finalMatches: MatchOutput[] = detailedMatches.map((m) => ({
       job: m.job,
@@ -298,11 +313,17 @@ export class QuestionnaireService {
       }),
       this.prisma.questionnaireSession.update({
         where: { id: sessionId },
-        data: { status: SessionStatus.COMPLETED, expiresAt },
+        data: {
+          status: SessionStatus.COMPLETED,
+          expiresAt,
+          portrait: portrait
+            ? (portrait as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        },
       }),
     ]);
 
-    return { sessionId, matches: finalMatches };
+    return { sessionId, matches: finalMatches, portrait };
   }
 
   /**
@@ -364,7 +385,32 @@ export class QuestionnaireService {
       matches,
       isPaid: session.isPaid,
       expiresAt: session.expiresAt?.toISOString() ?? null,
+      portrait: this.parsePortrait(session.portrait),
     };
+  }
+
+  /**
+   * Parse défensif du portrait stocké en JSON.
+   *
+   * On ne fait pas confiance aveuglément à la DB : la structure peut être
+   * obsolète (changement de schéma) ou incomplète (panne IA partielle).
+   * On retourne null si une seule des clés attendues est manquante.
+   */
+  private parsePortrait(raw: unknown): PortraitContent | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const obj = raw as Record<string, unknown>;
+    const archetype = typeof obj.archetype === 'string' ? obj.archetype : null;
+    const summary = typeof obj.summary === 'string' ? obj.summary : null;
+    const thrives = typeof obj.thrives === 'string' ? obj.thrives : null;
+    const drains = typeof obj.drains === 'string' ? obj.drains : null;
+    const strengths = Array.isArray(obj.strengths)
+      ? obj.strengths.filter((s): s is string => typeof s === 'string')
+      : null;
+
+    if (!archetype || !summary || !thrives || !drains || !strengths || strengths.length === 0) {
+      return null;
+    }
+    return { archetype, summary, strengths, thrives, drains };
   }
 
   /** Parse défensif du JSON `domainWeights` venant de la DB. */

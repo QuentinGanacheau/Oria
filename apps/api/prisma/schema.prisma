@@ -73,6 +73,11 @@ model QuestionnaireSession {
   ///   - Gratuit  → now + 30 jours
   ///   - Payant   → now + 1 an (prolongé à la confirmation de paiement)
   expiresAt    DateTime?
+  /// Portrait IA généré à la fin du questionnaire (Phase 2).
+  /// Contient l'archétype, les 3 forces, ce qui anime et ce qui épuise.
+  /// Format : PortraitContent (cf. ai.service.ts).
+  /// Null si l'IA était indisponible — le frontend skippe l'écran portrait.
+  portrait     Json?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   answers   SessionAnswer[]
