@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   MOCK_PERSONALIZED_SHEET,
   MOCK_PORTRAITS,
+  MOCK_RANK_WITH_PREFERENCES,
   mockRationale,
 } from './ai.mock';
 import { createAiProvider } from './providers/ai-provider.factory';
@@ -56,6 +57,11 @@ export type PersonalizedSheetInput = {
   rank: number;
   /** Situation de l'utilisateur : lycee | etudes_longues | reconversion | actif */
   situation: string;
+  /**
+   * Contexte track — permet d'adapter le ton et l'angle d'analyse.
+   * Optionnel : si absent, le track 'professional' est utilisé par défaut.
+   */
+  userContext?: UserContext;
 };
 
 /**
@@ -81,6 +87,38 @@ export type PortraitContent = {
 export type PortraitInput = {
   answers: Array<{ question: string; answer: string }>;
   userContext: UserContext;
+};
+
+export type RefinedJobInput = {
+  /** Métier aimé (👍). */
+  code: string;
+  libelle: string;
+};
+
+export type DislikedJobInput = {
+  /** Métier rejeté (👎). */
+  code: string;
+  libelle: string;
+  /** Raison optionnelle fournie par l'utilisateur. */
+  reason?: string | null;
+};
+
+export type RankWithPreferencesInput = {
+  candidates: Array<{ code: string; libelle: string }>;
+  answers: Array<{ question: string; answer: string }>;
+  likedJobs: RefinedJobInput[];
+  dislikedJobs: DislikedJobInput[];
+  userContext: UserContext;
+};
+
+export type RankWithPreferencesResult = {
+  /** Score 0-100 par code ROME. */
+  scores: Record<string, number>;
+  /**
+   * Phrase générée par l'IA expliquant ce que les notes révèlent sur le profil.
+   * Ex: "Tu apprécies les métiers qui combinent création et impact concret."
+   */
+  insight: string;
 };
 
 /**
@@ -251,13 +289,27 @@ export class AiService {
       .map((j) => `- ${j.slug} (${j.title})`)
       .join('\n');
 
-    const trackInstruction = input.userContext
-      ? TRACK_INSTRUCTIONS[input.userContext.track]
-      : TRACK_INSTRUCTIONS.professional;
+    const track = input.userContext?.track ?? 'professional';
+
+    // Instructions d'angle spécifiques au track.
+    // L'étudiant n'a pas d'expérience à valoriser → on parle de ses passions et potentiel.
+    // Le professionnel a un parcours → on parle de la continuité et des compétences transférables.
+    const rationaleAngle =
+      track === 'student'
+        ? [
+            "Pour justifier le match, appuie-toi sur ses passions, son style d'apprentissage",
+            "et ses textes libres (métier imaginé, journée idéale).",
+            "Montre comment CE métier peut nourrir ce qui l'anime.",
+          ].join(' ')
+        : [
+            "Pour justifier le match, appuie-toi sur son expérience actuelle :",
+            "ce qu'il fait, ce qu'il garde, les compétences pour lesquelles on vient le voir.",
+            "Montre la continuité entre son parcours et ce métier.",
+          ].join(' ');
 
     const prompt = [
-      "Tu es un conseiller d'orientation bienveillant et direct.",
-      trackInstruction,
+      "Tu es un conseiller d'orientation direct et honnête.",
+      rationaleAngle,
       '',
       "Voici les réponses de l'utilisateur à un questionnaire d'orientation :",
       '',
@@ -268,9 +320,10 @@ export class AiService {
       '',
       'Pour chacun de ces métiers, rédige UNE explication personnalisée de 2 à 3 phrases.',
       "L'explication doit :",
-      "- S'adresser directement à l'utilisateur (tutoyer, ton chaleureux).",
-      "- Citer explicitement 1 ou 2 éléments précis de SES réponses pour justifier le match.",
-      "- Mentionner honnêtement 1 point de vigilance si pertinent (sans dramatiser).",
+      "- S'adresser directement à l'utilisateur (tutoyer).",
+      "- Citer 1 ou 2 éléments CONCRETS et PRÉCIS de SES réponses (pas de généralités).",
+      "- Terminer par 1 point de vigilance HONNÊTE et spécifique — toujours, même si le match est fort.",
+      "  (ex: si ses irritants sont présents dans ce métier, nomme-les ; si la formation est longue, dis-le)",
       '',
       'Retourne UNIQUEMENT du JSON valide : {"rationales": {"slug": "explication..."}}',
       "N'ajoute rien d'autre autour du JSON.",
@@ -306,8 +359,14 @@ export class AiService {
   async generatePersonalizedSheet(
     input: PersonalizedSheetInput,
   ): Promise<PersonalizedSheetContent | null> {
-    if (this.mockMode) return MOCK_PERSONALIZED_SHEET;
+    if (this.mockMode) {
+      return MOCK_PERSONALIZED_SHEET[
+        input.userContext?.track ?? 'professional'
+      ];
+    }
     if (!this.provider) return null;
+
+    const track = input.userContext?.track ?? 'professional';
 
     const situationLabel: Record<string, string> = {
       lycee: 'lycéen / étudiant en cursus court',
@@ -321,8 +380,56 @@ export class AiService {
       .map((a) => `- "${a.question}" → ${a.answer}`)
       .join('\n');
 
+    // ── Instructions track-spécifiques ────────────────────────────────────
+    // Chaque champ du JSON a des instructions différentes selon le profil.
+    // L'étudiant a besoin de voir son potentiel et le chemin à construire.
+    // Le professionnel a besoin de voir la continuité avec ce qu'il a déjà.
+
+    const strengthsInstruction =
+      track === 'student'
+        ? [
+            '"strengths": "2-3 phrases montrant comment CE métier peut nourrir ses passions',
+            'et son style naturel. Cite au moins un élément concret de ses textes libres',
+            '(ce qui le fascine, le métier imaginé, la journée idéale).',
+            'Montre le chemin, pas juste la destination. Tutoie."',
+          ].join(' ')
+        : [
+            '"strengths": "2-3 phrases montrant quelles compétences de son parcours actuel',
+            '(citées dans ses réponses : ce qu\'il fait, ce qu\'il garde, pour quoi on vient le voir)',
+            'sont DIRECTEMENT réutilisables dans ce métier.',
+            'Rends tangible la continuité. Tutoie."',
+          ].join(' ');
+
+    const watchPointsInstruction = [
+      '"watchPoints": "1-2 phrases franchement honnêtes.',
+      'Règle absolue : si ses irritants (ce qui le fatigue, ce qu\'il fuit) sont présents',
+      'dans ce métier, NOMME-LES explicitement.',
+      track === 'professional'
+        ? 'Si sa contrainte de salaire ou de formation est en tension avec ce métier, dis-le.'
+        : 'Si le chemin vers ce métier nécessite une formation longue que ça ne lui convient pas, dis-le.',
+      'Une phrase précise et honnête vaut mieux qu\'un vague \\"fais attention\\".',
+      'Pas de catastrophisme, mais pas de diplomatie inutile non plus."',
+    ].join(' ');
+
+    const nextStepsInstruction =
+      track === 'student'
+        ? [
+            '"nextSteps": [',
+            '"étape 1 : explorer le terrain concrètement (ex: parler à quelqu\'un qui fait ce métier, shadow day, forum)",',
+            '"étape 2 : tester ses aptitudes sans s\'engager (projet perso, stage, association, MOOC ciblé)",',
+            '"étape 3 : identifier le parcours de formation le plus direct vers ce métier"',
+            ']',
+          ].join(' ')
+        : [
+            '"nextSteps": [',
+            '"étape 1 : valider le terrain sans quitter son job (entretien informel avec un pro du secteur, LinkedIn)",',
+            '"étape 2 : identifier son gap de compétences et trouver 1 ressource précise pour le combler",',
+            '"étape 3 : tester à petite échelle (freelance, mission ponctuelle, projet pilote)"',
+            ']',
+          ].join(' ');
+
     const prompt = [
-      "Tu es un conseiller d'orientation expert, bienveillant et direct.",
+      "Tu es un conseiller d'orientation expert, direct et honnête.",
       `Tu analyses le profil d'un utilisateur (${situationText}) pour le métier "${input.job.title}".`,
       '',
       "Réponses de l'utilisateur au questionnaire :",
@@ -336,13 +443,18 @@ export class AiService {
       '',
       'Génère une analyse personnalisée en JSON strict (sans markdown autour) :',
       '{',
-      '  "strengths": "2-3 phrases sur ce qui va lui plaire dans CE métier, en citant des éléments précis de SES réponses. Tutoie-le.",',
-      '  "watchPoints": "1-2 phrases honnêtes sur les points de vigilance pour SON profil spécifique. Pas de catastrophisme.",',
-      '  "nextSteps": ["étape 1 concrète et actionnée pour sa situation", "étape 2", "étape 3"],',
-      '  "dayInLife": "2-3 phrases décrivant une journée type dans ce métier, rédigées comme si on lui parlait directement."',
+      `  ${strengthsInstruction},`,
+      `  ${watchPointsInstruction},`,
+      `  ${nextStepsInstruction},`,
+      '  "dayInLife": "2-3 phrases réalistes décrivant une journée type dans ce métier.',
+      '   Concret, incarné, sans jargon. Rédigé comme si on lui parlait directement."',
       '}',
       '',
-      "Règles : tutoie toujours. Cite des éléments précis de ses réponses. N'invente pas de détails absents de son profil.",
+      "Règles absolues :",
+      "- Tutoie toujours.",
+      "- Cite des éléments CONCRETS et PRÉCIS de ses réponses (pas de généralités).",
+      "- watchPoints : au moins un point honnête, même si le match est bon.",
+      "- N'invente aucun détail absent du profil.",
     ].join('\n');
 
     const parsed = await this.askJson<Partial<PersonalizedSheetContent>>(
@@ -480,6 +592,100 @@ export class AiService {
    *
    * Retourne null si l'IA est indisponible — l'appelant gère le fallback.
    */
+  /**
+   * Reranke des candidats en tenant compte des préférences déclarées (Phase 4).
+   *
+   * Appelé pour la 2e passe de résultats, après que l'utilisateur ait noté
+   * les métiers de la passe 1 (👍/👎/🤔). Les raisons de rejet enrichissent
+   * le signal au-delà du simple binaire aimé/pas aimé.
+   *
+   * Retourne les scores ET un "insight" : phrase expliquant ce que les notes
+   * révèlent sur le profil (affiché en tête de la section résultats affinés).
+   *
+   * Température 0.2 : cohérence prioritaire sur la créativité.
+   */
+  async rankJobsWithPreferences(
+    input: RankWithPreferencesInput,
+  ): Promise<RankWithPreferencesResult | null> {
+    if (this.mockMode) {
+      return MOCK_RANK_WITH_PREFERENCES(input);
+    }
+    if (!this.provider || input.candidates.length === 0) return null;
+
+    const answersBlock = input.answers
+      .map((a) => `- "${a.question}" → ${a.answer}`)
+      .join('\n');
+
+    const likedBlock =
+      input.likedJobs.length > 0
+        ? input.likedJobs.map((j) => `  ✅ ${j.code}: ${j.libelle}`).join('\n')
+        : '  (aucun métier aimé)';
+
+    const dislikedBlock =
+      input.dislikedJobs.length > 0
+        ? input.dislikedJobs
+            .map((j) => {
+              const reason = j.reason ? ` → raison : "${j.reason}"` : '';
+              return `  ❌ ${j.code}: ${j.libelle}${reason}`;
+            })
+            .join('\n')
+        : '  (aucun métier rejeté)';
+
+    const candidatesBlock = input.candidates
+      .map((c) => `${c.code}: ${c.libelle}`)
+      .join('\n');
+
+    const trackInstruction = TRACK_INSTRUCTIONS[input.userContext.track];
+
+    const prompt = [
+      "Tu es un conseiller d'orientation expert.",
+      trackInstruction,
+      '',
+      "Voici les réponses de l'utilisateur au questionnaire :",
+      answersBlock,
+      '',
+      "L'utilisateur a évalué ses premiers résultats :",
+      "Métiers appréciés :",
+      likedBlock,
+      "Métiers rejetés :",
+      dislikedBlock,
+      '',
+      'Voici de nouveaux candidats à reranker (format "code: libellé") :',
+      candidatesBlock,
+      '',
+      'Ta mission :',
+      '1. Attribue un score 0-100 à chaque candidat.',
+      '   Favorise les métiers similaires aux aimés.',
+      '   Pénalise les métiers similaires aux rejetés (surtout si une raison est donnée).',
+      '2. Génère un "insight" : UNE phrase qui résume ce que les notes révèlent sur le profil.',
+      '   Ex: "Tu apprécies les métiers qui combinent structure et créativité."',
+      '   (Pas de "d\'après tes notes" — parle directement à la personne, tutoie.)',
+      '',
+      'Retourne UNIQUEMENT du JSON valide :',
+      '{"scores": {"M1805": 85, ...}, "insight": "..."}',
+    ].join('\n');
+
+    const parsed = await this.askJson<{
+      scores?: Record<string, number>;
+      insight?: string;
+    }>(prompt, 0.2);
+
+    if (!parsed?.scores || !parsed?.insight) return null;
+
+    const validCodes = new Set(input.candidates.map((c) => c.code));
+    const safeScores: Record<string, number> = {};
+    for (const [code, value] of Object.entries(parsed.scores)) {
+      if (!validCodes.has(code)) continue;
+      if (typeof value !== 'number' || Number.isNaN(value)) continue;
+      safeScores[code] = Math.max(0, Math.min(100, Math.round(value)));
+    }
+
+    return {
+      scores: safeScores,
+      insight: typeof parsed.insight === 'string' ? parsed.insight.trim() : '',
+    };
+  }
+
   async rankJobsForProfile(input: {
     candidates: Array<{ code: string; libelle: string }>;
     answers: Array<{ question: string; answer: string }>;

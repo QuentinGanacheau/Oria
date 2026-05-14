@@ -78,12 +78,41 @@ model QuestionnaireSession {
   /// Format : PortraitContent (cf. ai.service.ts).
   /// Null si l'IA était indisponible — le frontend skippe l'écran portrait.
   portrait     Json?
+  /// Résultats de la 2e passe (affinés par les notes utilisateur, Phase 4).
+  /// Null tant que l'utilisateur n'a pas payé et déclenché le raffinement.
+  /// Format : Array<RefinedMatch> — même structure que les matches de la passe 1.
+  refinedMatches Json?
+  /// Insight IA généré avec la 2e passe : phrase expliquant ce que les notes
+  /// révèlent sur le profil (ex: "Tu apprécies les métiers créatifs et techniques").
+  refineInsight  String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   answers   SessionAnswer[]
   matches   MatchResult[]
+  ratings   JobRating[]
 
   @@index([email])
+}
+
+/// Note posée par l'utilisateur sur un métier après avoir vu ses résultats.
+/// Signal clé pour la 2e passe de matching (Phase 4).
+model JobRating {
+  id        String   @id @default(cuid())
+  sessionId String
+  /// Code ROME du métier noté (ex: "M1805").
+  jobSlug   String
+  /// "like" | "dislike" | "neutral"
+  rating    String
+  /// Raison optionnelle du dislike — chips pré-définies et/ou texte libre.
+  /// Null pour les "like" et "neutral", optionnel pour les "dislike".
+  /// Signal très utile pour affiner la 2e passe IA.
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  session   QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, jobSlug])  // une note par couple — idempotent
+  @@index([sessionId])
 }
 
 model SessionAnswer {

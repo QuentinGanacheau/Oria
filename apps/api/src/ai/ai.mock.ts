@@ -2,7 +2,13 @@ import type { UserTrack } from './user-context';
 import type {
   PersonalizedSheetContent,
   PortraitContent,
+  RankWithPreferencesInput,
+  RankWithPreferencesResult,
 } from './ai.service';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type TrackRecord<T> = Record<UserTrack, T>;
 
 /**
  * Données factices pour le mode développement (DEV_MOCK_AI=true).
@@ -47,6 +53,31 @@ export const MOCK_PORTRAITS: Record<UserTrack, PortraitContent> = {
 
 // ── Rationales ────────────────────────────────────────────────────────────────
 
+// ── Raffinement par préférences (Phase 4) ─────────────────────────────────────
+
+export function MOCK_RANK_WITH_PREFERENCES(
+  input: RankWithPreferencesInput,
+): RankWithPreferencesResult {
+  const scores: Record<string, number> = {};
+  input.candidates.forEach((c, i) => {
+    scores[c.code] = Math.max(20, 88 - i * 6);
+  });
+
+  const hasLiked = input.likedJobs.length > 0;
+  const hasDislikedWithReason = input.dislikedJobs.some((j) => j.reason);
+
+  let insight = 'Tu sembles apprécier les métiers qui combinent autonomie et impact concret.';
+  if (hasLiked && hasDislikedWithReason) {
+    insight =
+      'Tes notes montrent que tu veux de la créativité sans la pression commerciale — ces pistes correspondent mieux à ça.';
+  } else if (hasLiked) {
+    insight =
+      'D\'après tes appréciations, tu es attiré par les métiers qui mêlent réflexion et réalisation concrète.';
+  }
+
+  return { scores, insight };
+}
+
 export function mockRationale(job: { slug: string; title: string }, rank: number): string {
   const templates = [
     `${job.title} semble être un excellent match pour ton profil. Ton mode de fonctionnement naturel — explorer avant d'agir et chercher du sens dans ce que tu fais — correspond bien à ce que ce métier demande.`,
@@ -56,18 +87,33 @@ export function mockRationale(job: { slug: string; title: string }, rank: number
   return templates[Math.min(rank, templates.length - 1)];
 }
 
-// ── Fiche personnalisée ───────────────────────────────────────────────────────
+// ── Fiches personnalisées (track-spécifiques) ─────────────────────────────────
 
-export const MOCK_PERSONALIZED_SHEET: PersonalizedSheetContent = {
-  strengths:
-    "Ce métier colle bien à ta façon de fonctionner : tu aimes comprendre les systèmes en profondeur avant de les toucher, et c'est exactement ce qu'on attend ici. Ta capacité à faire le lien entre les besoins humains et les contraintes techniques sera un vrai atout.",
-  watchPoints:
-    "Attention au rythme : certaines phases de ce métier peuvent être répétitives. Si tu as besoin de variété pour rester motivé·e, pense à identifier à l'avance comment tu diversifieras tes missions.",
-  nextSteps: [
-    'Passe 2h sur LinkedIn à identifier 5 personnes qui ont ce titre de poste et envoie-leur un message de 3 lignes pour échanger 20 minutes.',
-    'Trouve un projet open source ou une association où tu peux tester concrètement cette casquette pendant 4-6 semaines.',
-    'Consulte le référentiel ROME de ce métier pour lister les compétences clés — et évalue honnêtement lesquelles tu as déjà.',
-  ],
-  dayInLife:
-    "En semaine type, tu alternes entre moments de concentration profonde (analyse, conception) et échanges en équipe pour valider les directions. Les imprévus existent mais restent gérables. En fin de journée, tu vois souvent le résultat de ce que tu as produit — ce qui rend le tout satisfaisant.",
+export const MOCK_PERSONALIZED_SHEET: TrackRecord<PersonalizedSheetContent> = {
+  student: {
+    strengths:
+      "Ce métier peut vraiment nourrir ta curiosité : tu as dit que ce qui te fascine, c'est comprendre les systèmes avant d'agir. Ici, c'est exactement ce qu'on valorise. Ton envie de voir l'impact concret de ce que tu construis trouvera de quoi s'exprimer.",
+    watchPoints:
+      "Sois honnête avec toi-même : si les tâches répétitives te pèsent (tu l'as mentionné dans tes irritants), certaines phases de ce métier risquent de te demander beaucoup de discipline. La formation initiale est aussi plus longue que la moyenne — assure-toi que tu es prêt·e pour ça.",
+    nextSteps: [
+      'Trouve 2-3 personnes qui exercent ce métier et demande-leur 20 minutes pour comprendre leur quotidien réel — LinkedIn ou des événements sectoriels.',
+      'Teste tes aptitudes sans t\'engager : un MOOC de 4 semaines ou un projet perso court te donnera une vraie idée de ce que tu ressentiras au quotidien.',
+      'Consulte le référentiel ROME de ce métier et fais la liste des compétences clés — tu en as probablement déjà plusieurs sans le réaliser.',
+    ],
+    dayInLife:
+      "Tu commences souvent par un point rapide avec l'équipe pour aligner les priorités du jour. Ensuite, tu alternes entre phases de concentration (conception, analyse, production) et moments d'échange pour valider ou débloquer. En fin de journée, tu vois généralement le résultat de ce que tu as produit — et c'est souvent ce qui donne de l'énergie pour la suite.",
+  },
+  professional: {
+    strengths:
+      "La continuité avec ton parcours est réelle : les compétences de structuration et d'écoute que tu as développées sont directement valorisables ici. Ce n'est pas un virage à 180°, c'est une évolution — ce qui rend la transition plus solide.",
+    watchPoints:
+      "Ce point mérite d'être dit clairement : si ce qui te pèse aujourd'hui (les réunions sans décision, le manque de sens) existe aussi dans ce métier, ça ne changera pas magiquement. Assure-toi de valider ce point avec des gens qui le font vraiment avant de t'engager.",
+    nextSteps: [
+      'Avant tout : parle à 2-3 personnes qui ont fait cette transition. Demande-leur ce qui les a surpris — en bien et en mal. C\'est l\'info la plus précieuse.',
+      'Évalue ton gap réel : liste les compétences requises et celles que tu as déjà. Tu vas probablement découvrir que tu es plus proche que tu ne le crois.',
+      'Teste à petite échelle sans quitter ton poste : mission freelance, projet associatif, quelques heures de conseil. Valide que tu aimes vraiment ça en conditions réelles.',
+    ],
+    dayInLife:
+      "La semaine type alterne entre travail en solo (analyse, conception, production) et collaboration avec des collègues ou partenaires. Les réunions existent mais restent ciblées sur des décisions concrètes. Tu as généralement de l'autonomie sur ta façon d'organiser ton travail — ce qui convient bien si tu as besoin de te concentrer profondément.",
+  },
 };

@@ -20,7 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 type PublicQuestion = {
   id: string;
   text: string;
-  type: 'SINGLE_CHOICE' | 'FREE_TEXT';
+  type: 'SINGLE_CHOICE' | 'FREE_TEXT' | 'SUGGESTIONS_WITH_TEXT';
   placeholder?: string;
   helperText?: string;
   options: { id: string; label: string }[];
@@ -101,7 +101,10 @@ export class QuestionnaireService {
       throw new BadRequestException('Question invalide.');
     }
 
-    if (currentQuestion.type === 'FREE_TEXT') {
+    if (
+      currentQuestion.type === 'FREE_TEXT' ||
+      currentQuestion.type === 'SUGGESTIONS_WITH_TEXT'
+    ) {
       await this.saveFreeTextAnswer(session.id, currentQuestion, input.freeText);
     } else {
       await this.saveOptionAnswer(session.id, currentQuestion, input.optionKey);
@@ -326,6 +329,204 @@ export class QuestionnaireService {
     return { sessionId, matches: finalMatches, portrait };
   }
 
+  // ─── Phase 4 : notation et raffinement ───────────────────────────────────
+
+  /**
+   * Enregistre la note d'un utilisateur sur un métier.
+   *
+   * Idempotent via @@unique([sessionId, jobSlug]) : l'utilisateur peut
+   * changer d'avis, la note est simplement mise à jour.
+   * Accessible sans paiement — noter est la porte d'entrée vers le payant.
+   */
+  async rateJob(
+    sessionId: string,
+    jobSlug: string,
+    rating: 'like' | 'dislike' | 'neutral',
+    reason?: string,
+  ): Promise<void> {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) throw new NotFoundException('Session introuvable.');
+
+    await this.prisma.jobRating.upsert({
+      where: { sessionId_jobSlug: { sessionId, jobSlug } },
+      update: { rating, reason: reason ?? null },
+      create: { sessionId, jobSlug, rating, reason: reason ?? null },
+    });
+  }
+
+  /**
+   * Génère la 2e passe de résultats affinés par les notes (feature payante).
+   *
+   * Pipeline :
+   *   1. Vérifie que la session est payée
+   *   2. Cache hit → retourne directement si refinedMatches déjà en DB
+   *   3. Lit les notes liked/disliked de la session
+   *   4. Sélectionne des candidats dans les domaines des liked (exclut la passe 1)
+   *   5. Appel IA rankJobsWithPreferences → scores + insight
+   *   6. Hydrate les résultats + persiste en cache
+   *
+   * @throws ForbiddenException si non payé
+   * @throws ServiceUnavailableException si IA indisponible
+   */
+  async refineResults(sessionId: string) {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        matches: { orderBy: { rank: 'asc' } },
+        answers: { include: { question: true, option: true } },
+        ratings: true,
+      },
+    });
+    if (!session) throw new NotFoundException('Session introuvable.');
+
+    if (!session.isPaid) {
+      throw new BadRequestException(
+        'Le raffinement des résultats est une fonctionnalité payante.',
+      );
+    }
+
+    // Cache hit — retourne directement sans rappeler l'IA
+    if (session.refinedMatches !== null && session.refineInsight !== null) {
+      this.logger.log(`refineResults: cache hit pour session ${sessionId}`);
+      return {
+        matches: session.refinedMatches as unknown as MatchOutput[],
+        insight: session.refineInsight,
+      };
+    }
+
+    // Prépare les notes liked/disliked
+    const likedJobs = session.ratings
+      .filter((r) => r.rating === 'like')
+      .map((r) => ({ code: r.jobSlug, libelle: r.jobSlug }));
+
+    const dislikedJobs = session.ratings
+      .filter((r) => r.rating === 'dislike')
+      .map((r) => ({
+        code: r.jobSlug,
+        libelle: r.jobSlug,
+        reason: r.reason ?? null,
+      }));
+
+    // Enrichit les libellés des métiers notés depuis la DB ROME
+    const ratedSlugs = session.ratings.map((r) => r.jobSlug);
+    const ratedRomeJobs = await this.prisma.romeJob.findMany({
+      where: { code: { in: ratedSlugs } },
+      select: { code: true, libelle: true, codeGrandDomaine: true },
+    });
+    const libelleMap = new Map(ratedRomeJobs.map((j) => [j.code, j.libelle]));
+    const domainMap = new Map(
+      ratedRomeJobs.map((j) => [j.code, j.codeGrandDomaine]),
+    );
+
+    const likedEnriched = likedJobs.map((j) => ({
+      code: j.code,
+      libelle: libelleMap.get(j.code) ?? j.code,
+    }));
+    const dislikedEnriched = dislikedJobs.map((j) => ({
+      code: j.code,
+      libelle: libelleMap.get(j.code) ?? j.code,
+      reason: j.reason,
+    }));
+
+    // Domaines des liked → base des nouveaux candidats
+    const alreadySeenSlugs = new Set(session.matches.map((m) => m.jobSlug));
+    const likedDomains = [
+      ...new Set(
+        likedJobs
+          .map((j) => domainMap.get(j.code))
+          .filter((d): d is string => !!d),
+      ),
+    ];
+
+    // Fallback si aucun liked : utilise les domaines des matches passe 1
+    const sourceDomains =
+      likedDomains.length > 0
+        ? likedDomains
+        : [...new Set(
+            ratedRomeJobs
+              .map((j) => j.codeGrandDomaine)
+              .filter((d): d is string => !!d),
+          )];
+
+    // Nouveaux candidats — exclut tous les métiers déjà vus en passe 1
+    const newCandidateRows = await this.prisma.romeJob.findMany({
+      where: {
+        codeGrandDomaine: { in: sourceDomains.length > 0 ? sourceDomains : undefined },
+        code: { notIn: [...alreadySeenSlugs] },
+      },
+      select: { code: true, libelle: true },
+    });
+
+    // Shuffle + cap à 30 candidats pour le prompt IA
+    const shuffled = newCandidateRows
+      .map((r) => ({ r, sort: Math.random() }))
+      .sort((a, b) => a.sort - b.sort)
+      .map(({ r }) => r)
+      .slice(0, 30);
+
+    if (shuffled.length === 0) {
+      throw new ServiceUnavailableException(
+        'Pas assez de nouveaux métiers disponibles pour affiner les résultats.',
+      );
+    }
+
+    // UserContext depuis la situation
+    const situationAnswer = session.answers.find(
+      (a) => a.question.key === 'situation',
+    );
+    const situation = situationAnswer?.option?.key ?? 'actif';
+    const userContext = deriveUserContext(situation);
+
+    const formattedAnswers = session.answers.map((a) => ({
+      question: a.question.text,
+      answer: a.option?.label ?? a.freeText ?? '',
+    }));
+
+    // Appel IA avec signal de préférence
+    const result = await this.ai.rankJobsWithPreferences({
+      candidates: shuffled,
+      answers: formattedAnswers,
+      likedJobs: likedEnriched,
+      dislikedJobs: dislikedEnriched,
+      userContext,
+    });
+
+    if (!result) {
+      throw new ServiceUnavailableException(
+        "L'IA est temporairement indisponible. Réessaie dans quelques minutes.",
+      );
+    }
+
+    // Top 5 candidats selon les scores IA
+    const ranked = shuffled
+      .map((c) => ({ code: c.code, libelle: c.libelle, score: result.scores[c.code] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    // Hydrate avec les détails complets
+    const detailedMatches = await Promise.all(
+      ranked.map(async (m) => ({
+        job: await this.jobs.findBySlug(m.code),
+        score: m.score,
+        scorePercent: m.score,
+        rationale: null as string | null,
+      })),
+    );
+
+    // Persiste en cache
+    await this.prisma.questionnaireSession.update({
+      where: { id: sessionId },
+      data: {
+        refinedMatches: detailedMatches as unknown as Prisma.InputJsonValue,
+        refineInsight: result.insight,
+      },
+    });
+
+    return { matches: detailedMatches, insight: result.insight };
+  }
+
   /**
    * Restaure les résultats d'une session depuis la DB via un lien email.
    *
@@ -492,7 +693,7 @@ export class QuestionnaireService {
           question: {
             id: situationQ.key,
             text: situationQ.text,
-            type: situationQ.type === 'FREE_TEXT' ? 'FREE_TEXT' : 'SINGLE_CHOICE',
+            type: this.toPublicType(situationQ.type),
             placeholder: situationQ.placeholder ?? undefined,
             helperText: situationQ.helperText ?? undefined,
             options: situationQ.options.map((opt) => ({
@@ -520,7 +721,7 @@ export class QuestionnaireService {
       question: {
         id: chosen.key,
         text: chosen.text,
-        type: chosen.type === 'FREE_TEXT' ? 'FREE_TEXT' : 'SINGLE_CHOICE',
+        type: this.toPublicType(chosen.type),
         placeholder: chosen.placeholder ?? undefined,
         helperText: chosen.helperText ?? undefined,
         options: chosen.options.map((opt) => ({ id: opt.key, label: opt.label })),
@@ -616,6 +817,11 @@ export class QuestionnaireService {
     return Object.keys(result).length > 0 ? result : null;
   }
 
+  private toPublicType(type: string): PublicQuestion['type'] {
+    if (type === 'FREE_TEXT' || type === 'SUGGESTIONS_WITH_TEXT') return type;
+    return 'SINGLE_CHOICE';
+  }
+
   /** Score arbitraire pour les questions FREE_TEXT (signal qualitatif fort). */
   private static readonly FREE_TEXT_VARIANCE_PROXY = 6;
 
@@ -631,7 +837,10 @@ export class QuestionnaireService {
     type: string;
     options: Array<{ jobWeights: unknown }>;
   }): number {
-    if (question.type === 'FREE_TEXT') {
+    if (
+      question.type === 'FREE_TEXT' ||
+      question.type === 'SUGGESTIONS_WITH_TEXT'
+    ) {
       return QuestionnaireService.FREE_TEXT_VARIANCE_PROXY;
     }
     const allScores: number[] = [];

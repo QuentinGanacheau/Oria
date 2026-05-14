@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AnswerNextDto } from './dto/answer-next.dto';
 import { FinishSessionDto } from './dto/finish-session.dto';
+import { RateJobDto } from './dto/rate-job.dto';
 import { RestoreSessionDto } from './dto/restore-session.dto';
 import { StartSessionDto } from './dto/start-session.dto';
 import { QuestionnaireService } from './questionnaire.service';
@@ -22,6 +23,39 @@ export class QuestionnaireController {
   @Post('next')
   next(@Body() body: AnswerNextDto) {
     return this.questionnaire.answerAndGetNext(body);
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/rate
+   *
+   * Enregistre la note d'un utilisateur sur un métier (👍/👎/🤔).
+   * Idempotent — on peut changer d'avis, la note est mise à jour.
+   * Accessible sans paiement (noter = porte d'entrée vers la passe 2 payante).
+   */
+  @Post(':sessionId/rate')
+  async rate(
+    @Param('sessionId') sessionId: string,
+    @Body() body: RateJobDto,
+  ) {
+    await this.questionnaire.rateJob(
+      sessionId,
+      body.jobSlug,
+      body.rating,
+      body.reason,
+    );
+    return { ok: true };
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/refine
+   *
+   * Génère la 2e passe de résultats affinés par les notes.
+   * Protégé : session.isPaid doit être true → 400 sinon.
+   * Idempotent via cache DB : si déjà généré, retourne le cache.
+   */
+  @Post(':sessionId/refine')
+  refine(@Param('sessionId') sessionId: string) {
+    return this.questionnaire.refineResults(sessionId);
   }
 
   /**

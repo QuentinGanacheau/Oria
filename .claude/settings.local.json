@@ -4,7 +4,9 @@
       "Bash(npx prisma *)",
       "Bash(cat vitest.config.ts)",
       "Bash(cat vitest.config.js)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

@@ -5,6 +5,7 @@ import {
   type PersonalizedSheetContent,
   type PersonalizedSheetInput,
 } from '../ai/ai.service';
+import { deriveUserContext } from '../ai/user-context';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -85,6 +86,7 @@ export class JobsService {
 
     const situationAnswer = answers.find((a) => a.question.key === 'situation');
     const situation = situationAnswer?.option?.key ?? 'actif';
+    const userContext = deriveUserContext(situation);
 
     const formattedAnswers = answers.map((a) => ({
       question: a.question.text,
@@ -101,6 +103,7 @@ export class JobsService {
       answers: formattedAnswers,
       rank: matchResult.rank,
       situation,
+      userContext,
     };
 
     const content = await this.ai.generatePersonalizedSheet(input);
