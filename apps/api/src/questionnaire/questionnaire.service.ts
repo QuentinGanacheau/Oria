@@ -381,7 +381,12 @@ export class QuestionnaireService {
     });
     if (!session) throw new NotFoundException('Session introuvable.');
 
-    if (!session.isPaid) {
+    // DEV_BYPASS_PAYMENT=true bypasse le guard de paiement indépendamment du
+    // mock IA — permet de tester le paywall (false) ou non (true) séparément.
+    // ⚠️ Ne jamais activer en production.
+    const devBypass = process.env.DEV_BYPASS_PAYMENT === 'true';
+
+    if (!session.isPaid && !devBypass) {
       throw new BadRequestException(
         'Le raffinement des résultats est une fonctionnalité payante.',
       );

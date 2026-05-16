@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
-import PersonalizedSheetSection from "./personalized-sheet";
+import JobPageTabs from "./job-page-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -49,77 +48,7 @@ export default async function MetierPage({ params }: { params: Promise<{ slug: s
           <p className="mt-4 text-xl text-slate-600 dark:text-slate-300">{job.tagline}</p>
         </header>
 
-        {job.summary && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">En bref</h2>
-            <p className="mt-2 leading-relaxed text-slate-700 whitespace-pre-line dark:text-slate-300">
-              {job.summary}
-            </p>
-          </section>
-        )}
-
-        {job.missions.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Missions typiques</h2>
-            <ul className="mt-3 list-inside list-disc space-y-2 text-slate-700 dark:text-slate-300">
-              {job.missions.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {job.skills.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Compétences souvent attendues</h2>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {job.skills.map((s) => (
-                <li
-                  key={s}
-                  className="rounded-full bg-slate-100 px-3 py-1 text-sm dark:bg-slate-800"
-                >
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {job.formations.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Formations possibles</h2>
-            <ul className="mt-3 list-inside list-disc space-y-2 text-slate-700 dark:text-slate-300">
-              {job.formations.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {(job.salaryRangeHint || job.workContext) && (
-          <section className="mt-10 grid gap-6 sm:grid-cols-2">
-            {job.salaryRangeHint && (
-              <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                  Rémunération
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed">{job.salaryRangeHint}</p>
-              </div>
-            )}
-            {job.workContext && (
-              <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                  Contexte de travail
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed">{job.workContext}</p>
-              </div>
-            )}
-          </section>
-        )}
-
-        <Suspense>
-          <PersonalizedSheetSection slug={slug} />
-        </Suspense>
+        <JobPageTabs job={job} />
       </article>
     </div>
   );

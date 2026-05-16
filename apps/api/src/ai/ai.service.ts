@@ -48,7 +48,49 @@ export type PersonalizedSheetContent = {
   nextSteps: string[];
   /** Description narrative d'une journée type (2-3 phrases). */
   dayInLife: string;
+  /** Plan d'action concret (Phase 5) — null si IA indisponible. */
+  actionPlan?: ActionPlan | null;
 };
+
+/** Formation accessible pour un étudiant. */
+export type StudentFormation = {
+  name: string;
+  duration: string;
+  cost: string;
+};
+
+/** Formation CPF pour un professionnel en reconversion. */
+export type CpfFormation = {
+  name: string;
+  duration: string;
+  cpfEligible: boolean;
+};
+
+/** Plan d'action track étudiant. */
+export type ActionPlanStudent = {
+  track: 'student';
+  /** 2-3 formations concrètes (BTS, Licence Pro, Master…) avec durée et coût estimé. */
+  formations: StudentFormation[];
+  /** Parcours type du lycée/études au métier visé. Ex: "Bac → DUT Info (2 ans) → Licence Pro (1 an)". */
+  typicalPath: string;
+  /** 3 actions très concrètes à faire dans les 7 prochains jours. */
+  thisWeek: string[];
+};
+
+/** Plan d'action track professionnel / reconversion. */
+export type ActionPlanProfessional = {
+  track: 'professional';
+  /** Compétences transférables déjà acquises vs compétences à développer. */
+  skillsDelta: { already: string[]; missing: string[] };
+  /** 1-2 formations accessibles via CPF ou dispositifs de reconversion. */
+  cpfFormations: CpfFormation[];
+  /** Fourchette de salaire de départ réaliste pour ce métier en reconversion. */
+  salaryHint: string;
+  /** Jalons concrets sur 3 horizons temporels. */
+  timeline: { sixMonths: string; oneYear: string; twoYears: string };
+};
+
+export type ActionPlan = ActionPlanStudent | ActionPlanProfessional;
 
 export type PersonalizedSheetInput = {
   job: { title: string; summary: string; missions: string[]; skills: string[] };
@@ -428,6 +470,44 @@ export class AiService {
             ']',
           ].join(' ');
 
+    // ── Plan d'action (Phase 5) — instructions track-spécifiques ────────────
+    const actionPlanInstruction =
+      track === 'student'
+        ? [
+            '"actionPlan": {',
+            '  "track": "student",',
+            '  "formations": [',
+            '    { "name": "Nom de la formation (BTS, Licence Pro, BUT, Master…)", "duration": "Durée réaliste (ex: 2 ans)", "cost": "Coût estimé (ex: gratuit en apprentissage, 5 000 €/an en école privée)" },',
+            '    /* 1 à 2 autres formations alternatives pertinentes */',
+            '  ],',
+            '  "typicalPath": "Parcours type du lycée/études jusqu\'à ce métier. Ex: Bac → DUT (2 ans) → Licence Pro (1 an) → entrée dans le métier.",',
+            '  "thisWeek": [',
+            '    "Action très concrète à faire dans les 7 prochains jours (ex: trouver 2 personnes sur LinkedIn qui font ce métier et les contacter)",',
+            '    "Action concrète 2 (ex: regarder 3 témoignages vidéo de professionnels sur YouTube)",',
+            '    "Action concrète 3 (ex: visiter le site de l\'école X et regarder les conditions d\'admission)"',
+            '  ]',
+            '}',
+          ].join('\n  ')
+        : [
+            '"actionPlan": {',
+            '  "track": "professional",',
+            '  "skillsDelta": {',
+            '    "already": ["compétence 1 qu\'il a déjà d\'après ses réponses", "compétence 2", "compétence 3"],',
+            '    "missing": ["compétence manquante 1 pour ce métier", "compétence manquante 2"]',
+            '  },',
+            '  "cpfFormations": [',
+            '    { "name": "Nom de la formation CPF ou dispositif reconversion", "duration": "Durée (ex: 3 mois)", "cpfEligible": true },',
+            '    { "name": "Alternative formation", "duration": "Durée", "cpfEligible": false }',
+            '  ],',
+            '  "salaryHint": "Fourchette de salaire de départ réaliste en reconversion pour ce métier (ex: Entre 28 000 € et 35 000 € brut/an pour un débutant reconverti).",',
+            '  "timeline": {',
+            '    "sixMonths": "Objectif concret à 6 mois : ce qui est réaliste de valider ou tester en demi-année.",',
+            '    "oneYear": "Objectif à 1 an : cap réaliste si démarrage maintenant.",',
+            '    "twoYears": "Objectif à 2 ans : où il peut raisonnablement être si il engage la démarche aujourd\'hui."',
+            '  }',
+            '}',
+          ].join('\n  ');
+
     const prompt = [
       "Tu es un conseiller d'orientation expert, direct et honnête.",
       `Tu analyses le profil d'un utilisateur (${situationText}) pour le métier "${input.job.title}".`,
@@ -447,7 +527,8 @@ export class AiService {
       `  ${watchPointsInstruction},`,
       `  ${nextStepsInstruction},`,
       '  "dayInLife": "2-3 phrases réalistes décrivant une journée type dans ce métier.',
-      '   Concret, incarné, sans jargon. Rédigé comme si on lui parlait directement."',
+      '   Concret, incarné, sans jargon. Rédigé comme si on lui parlait directement.",',
+      `  ${actionPlanInstruction}`,
       '}',
       '',
       "Règles absolues :",
@@ -455,6 +536,10 @@ export class AiService {
       "- Cite des éléments CONCRETS et PRÉCIS de ses réponses (pas de généralités).",
       "- watchPoints : au moins un point honnête, même si le match est bon.",
       "- N'invente aucun détail absent du profil.",
+      "- actionPlan : base les formations et compétences sur la réalité du métier et du profil, pas des généralités.",
+      track === 'student'
+        ? "- formations : privilégie les voies publiques accessibles (BTS, IUT, Licence Pro) avant les écoles privées coûteuses."
+        : "- skillsDelta : identifie les compétences depuis ses réponses réelles (ce qu'il fait, ce qu'il garde, pour quoi on vient le voir).",
     ].join('\n');
 
     const parsed = await this.askJson<Partial<PersonalizedSheetContent>>(
@@ -463,8 +548,8 @@ export class AiService {
     );
     if (!parsed) return null;
 
-    // Validation défensive : chaque champ doit être présent et du bon type
-    const { strengths, watchPoints, nextSteps, dayInLife } = parsed;
+    // Validation défensive : chaque champ obligatoire doit être présent
+    const { strengths, watchPoints, nextSteps, dayInLife, actionPlan } = parsed;
     if (
       typeof strengths !== 'string' || strengths.trim().length === 0 ||
       typeof watchPoints !== 'string' || watchPoints.trim().length === 0 ||
@@ -482,6 +567,8 @@ export class AiService {
         .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
         .slice(0, 3),
       dayInLife: dayInLife.trim(),
+      // actionPlan est optionnel : null si absent ou malformé (dégradation propre)
+      actionPlan: validateActionPlan(actionPlan, track) ?? null,
     };
   }
 
@@ -793,4 +880,106 @@ function stripCodeFences(raw: string): string {
   const trimmed = raw.trim();
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   return fence ? fence[1].trim() : trimmed;
+}
+
+/**
+ * Valide et normalise l'objet actionPlan retourné par l'IA.
+ * Retourne null si la structure est absente ou malformée — dégradation propre.
+ */
+function validateActionPlan(
+  raw: unknown,
+  track: 'student' | 'professional',
+): ActionPlan | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+
+  if (track === 'student') {
+    const formations = Array.isArray(obj.formations)
+      ? obj.formations
+          .filter(
+            (f): f is StudentFormation =>
+              f !== null &&
+              typeof f === 'object' &&
+              typeof (f as Record<string, unknown>).name === 'string' &&
+              typeof (f as Record<string, unknown>).duration === 'string' &&
+              typeof (f as Record<string, unknown>).cost === 'string',
+          )
+          .slice(0, 3)
+      : [];
+
+    const thisWeek = Array.isArray(obj.thisWeek)
+      ? obj.thisWeek
+          .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+          .slice(0, 3)
+      : [];
+
+    if (
+      typeof obj.typicalPath !== 'string' ||
+      obj.typicalPath.trim().length === 0
+    ) return null;
+    if (formations.length === 0 || thisWeek.length === 0) return null;
+
+    return {
+      track: 'student',
+      formations,
+      typicalPath: obj.typicalPath.trim(),
+      thisWeek,
+    };
+  }
+
+  // professional
+  const delta =
+    obj.skillsDelta && typeof obj.skillsDelta === 'object'
+      ? (obj.skillsDelta as Record<string, unknown>)
+      : undefined;
+  const already = Array.isArray(delta?.already)
+    ? (delta.already as unknown[])
+        .filter((s): s is string => typeof s === 'string')
+        .slice(0, 5)
+    : [];
+  const missing = Array.isArray(delta?.missing)
+    ? (delta.missing as unknown[])
+        .filter((s): s is string => typeof s === 'string')
+        .slice(0, 5)
+    : [];
+
+  const cpfFormations = Array.isArray(obj.cpfFormations)
+    ? obj.cpfFormations
+        .filter(
+          (f): f is CpfFormation =>
+            f !== null &&
+            typeof f === 'object' &&
+            typeof (f as Record<string, unknown>).name === 'string' &&
+            typeof (f as Record<string, unknown>).duration === 'string',
+        )
+        .map((f) => ({ ...f, cpfEligible: Boolean(f.cpfEligible) }))
+        .slice(0, 3)
+    : [];
+
+  const tl =
+    obj.timeline && typeof obj.timeline === 'object'
+      ? (obj.timeline as Record<string, unknown>)
+      : undefined;
+  if (
+    typeof obj.salaryHint !== 'string' ||
+    already.length === 0 ||
+    !tl ||
+    typeof tl.sixMonths !== 'string' ||
+    typeof tl.oneYear !== 'string' ||
+    typeof tl.twoYears !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    track: 'professional',
+    skillsDelta: { already, missing },
+    cpfFormations,
+    salaryHint: obj.salaryHint.trim(),
+    timeline: {
+      sixMonths: tl.sixMonths.trim(),
+      oneYear: tl.oneYear.trim(),
+      twoYears: tl.twoYears.trim(),
+    },
+  };
 }
