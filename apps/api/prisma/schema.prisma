@@ -125,6 +125,9 @@ model SessionAnswer {
   freeText          String?
   // Poids métiers extraits par l'IA à partir du texte libre (cache pour éviter de rappeler l'IA)
   extractedWeights  Json?
+  // Phase 6 — question de relance générée par l'IA + réponse de l'utilisateur
+  followUpQuestion  String?
+  followUpAnswer    String?
   createdAt         DateTime             @default(now())
   session           QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   question          Question             @relation(fields: [questionId], references: [id], onDelete: Restrict)

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AnswerNextDto } from './dto/answer-next.dto';
 import { FinishSessionDto } from './dto/finish-session.dto';
+import { GoBackDto } from './dto/go-back.dto';
 import { RateJobDto } from './dto/rate-job.dto';
 import { RestoreSessionDto } from './dto/restore-session.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -32,6 +33,18 @@ export class QuestionnaireController {
    * Idempotent — on peut changer d'avis, la note est mise à jour.
    * Accessible sans paiement (noter = porte d'entrée vers la passe 2 payante).
    */
+  /**
+   * POST /v1/questionnaire/:sessionId/back
+   *
+   * Supprime la réponse à `questionKey` et toutes les réponses ultérieures,
+   * permettant à l'utilisateur de revenir en arrière dans le questionnaire.
+   * La session doit être ACTIVE.
+   */
+  @Post(':sessionId/back')
+  back(@Param('sessionId') sessionId: string, @Body() body: GoBackDto) {
+    return this.questionnaire.goBackToQuestion(sessionId, body.questionKey);
+  }
+
   @Post(':sessionId/rate')
   async rate(
     @Param('sessionId') sessionId: string,

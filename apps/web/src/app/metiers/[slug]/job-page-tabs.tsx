@@ -61,7 +61,9 @@ function StaticJobContent({
 
       {job.skills.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold">Compétences souvent attendues</h2>
+          <h2 className="text-lg font-semibold">
+            Compétences souvent attendues
+          </h2>
           <ul className="mt-3 flex flex-wrap gap-2">
             {job.skills.map((s) => (
               <li
@@ -93,7 +95,9 @@ function StaticJobContent({
               <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                 Rémunération
               </h3>
-              <p className="mt-2 text-sm leading-relaxed">{job.salaryRangeHint}</p>
+              <p className="mt-2 text-sm leading-relaxed">
+                {job.salaryRangeHint}
+              </p>
             </div>
           )}
           {job.workContext && (
@@ -125,7 +129,9 @@ function StaticJobContent({
 function JobPageTabsInner({ job }: { job: Job }) {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
-  const rank = searchParams.get("rank") ? parseInt(searchParams.get("rank")!, 10) : null;
+  const rank = searchParams.get("rank")
+    ? parseInt(searchParams.get("rank")!, 10)
+    : null;
   const unlocked = isUnlocked();
 
   // Contenu verrouillé = rank > 1 et pas payé → on ouvre sur "Mon analyse"
@@ -134,7 +140,9 @@ function JobPageTabsInner({ job }: { job: Job }) {
 
   // Sans session, on affiche le contenu statique directement sans onglets
   const hasTabs = !!sessionId;
-  const [activeTab, setActiveTab] = useState<TabId>(isLocked ? "analyse" : "metier");
+  const [activeTab, setActiveTab] = useState<TabId>(
+    isLocked ? "analyse" : "metier",
+  );
 
   if (!hasTabs) {
     return (
@@ -146,7 +154,11 @@ function JobPageTabsInner({ job }: { job: Job }) {
 
   const tabs: { id: TabId; label: string; locked: boolean }[] = [
     { id: "metier", label: "📋 Ce métier", locked: false },
-    { id: "analyse", label: isLocked ? "🔒 Mon analyse" : "👤 Mon analyse", locked: isLocked },
+    {
+      id: "analyse",
+      label: isLocked ? "🔒 Mon analyse" : "👤 Mon analyse",
+      locked: isLocked,
+    },
   ];
 
   return (

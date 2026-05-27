@@ -79,6 +79,18 @@ export class QuestionnaireService {
     };
   }
 
+  /**
+   * Questions texte libre éligibles à une relance IA (Phase 6).
+   * Choisies pour leur fort signal qualitatif sur le profil.
+   */
+  private static readonly FOLLOWUP_ELIGIBLE_KEYS = new Set([
+    'passion_centrale',
+    'metier_actuel',
+    'ce_qui_pese',
+    'ce_qui_garde',
+    'journee_ideale',
+  ]);
+
   async answerAndGetNext(input: {
     sessionId: string;
     questionKey: string;
@@ -93,6 +105,13 @@ export class QuestionnaireService {
       throw new BadRequestException('La session est déjà terminée.');
     }
 
+    // ── Cas : soumission d'une réponse à une relance (__followup) ────────────
+    if (input.questionKey.endsWith('__followup')) {
+      const parentKey = input.questionKey.replace('__followup', '');
+      return this.saveFollowUpAnswer(session.id, parentKey, input.freeText);
+    }
+
+    // ── Cas : soumission d'une réponse à une question normale ────────────────
     const currentQuestion = await this.prisma.question.findUnique({
       where: { key: input.questionKey },
       include: { options: true },
@@ -110,8 +129,151 @@ export class QuestionnaireService {
       await this.saveOptionAnswer(session.id, currentQuestion, input.optionKey);
     }
 
-    const { question: nextQuestion, progress } = await this.getNextQuestionForSession(session.id);
+    // ── Phase 6 : tentative de génération d'une relance ──────────────────────
+    // Uniquement sur les questions texte libre de la whitelist, et uniquement
+    // si cette question n'a pas encore reçu une relance (évite la boucle infinie).
+    if (
+      QuestionnaireService.FOLLOWUP_ELIGIBLE_KEYS.has(input.questionKey) &&
+      (currentQuestion.type === 'FREE_TEXT' ||
+        currentQuestion.type === 'SUGGESTIONS_WITH_TEXT')
+    ) {
+      const existingAnswer = await this.prisma.sessionAnswer.findUnique({
+        where: {
+          sessionId_questionId: {
+            sessionId: session.id,
+            questionId: currentQuestion.id,
+          },
+        },
+      });
+
+      // Ne génère une relance que si aucune n'existe déjà pour cette réponse
+      if (existingAnswer && !existingAnswer.followUpQuestion) {
+        const situation = (
+          await this.prisma.sessionAnswer.findMany({
+            where: { sessionId: session.id },
+            include: { question: true, option: true },
+          })
+        ).find((a) => a.question.key === 'situation')?.option?.key ?? 'actif';
+        const userContext = deriveUserContext(situation);
+
+        const followUpText = await this.ai.generateFollowUp({
+          questionKey: input.questionKey,
+          parentQuestion: currentQuestion.text,
+          answer: input.freeText ?? '',
+          userContext,
+        });
+
+        if (followUpText) {
+          // Persiste la question de relance dès maintenant (avant que l'utilisateur réponde)
+          await this.prisma.sessionAnswer.update({
+            where: {
+              sessionId_questionId: {
+                sessionId: session.id,
+                questionId: currentQuestion.id,
+              },
+            },
+            data: { followUpQuestion: followUpText },
+          });
+
+          // Retourne la relance comme prochaine question — progress gelée
+          const currentProgress = await this.getCurrentProgress(session.id);
+          return {
+            complete: false,
+            question: {
+              id: `${input.questionKey}__followup`,
+              text: followUpText,
+              type: 'FREE_TEXT' as const,
+              options: [],
+            },
+            progress: currentProgress,
+          };
+        }
+      }
+    }
+
+    const { question: nextQuestion, progress } =
+      await this.getNextQuestionForSession(session.id);
     return { complete: nextQuestion === null, question: nextQuestion, progress };
+  }
+
+  /** Sauvegarde la réponse à une relance dans followUpAnswer de la question parente. */
+  private async saveFollowUpAnswer(
+    sessionId: string,
+    parentKey: string,
+    freeText: string | undefined,
+  ) {
+    const text = (freeText ?? '').trim();
+    if (text.length < 3) throw new BadRequestException('Réponse trop courte.');
+    if (text.length > MAX_FREE_TEXT_LENGTH) {
+      throw new BadRequestException('Réponse trop longue.');
+    }
+
+    const parentQuestion = await this.prisma.question.findUnique({
+      where: { key: parentKey },
+    });
+    if (!parentQuestion) throw new BadRequestException('Question parente introuvable.');
+
+    const parentAnswer = await this.prisma.sessionAnswer.findUnique({
+      where: {
+        sessionId_questionId: {
+          sessionId,
+          questionId: parentQuestion.id,
+        },
+      },
+    });
+    if (!parentAnswer) throw new BadRequestException('Réponse parente introuvable.');
+
+    await this.prisma.sessionAnswer.update({
+      where: {
+        sessionId_questionId: { sessionId, questionId: parentQuestion.id },
+      },
+      data: { followUpAnswer: text },
+    });
+
+    const { question: nextQuestion, progress } =
+      await this.getNextQuestionForSession(sessionId);
+    return { complete: nextQuestion === null, question: nextQuestion, progress };
+  }
+
+  /** Calcule la progression courante sans avancer dans le flow. */
+  private async getCurrentProgress(
+    sessionId: string,
+  ): Promise<{ answered: number; total: number | null }> {
+    const [questions, answers] = await Promise.all([
+      this.prisma.question.findMany({
+        where: { active: true },
+        orderBy: { orderHint: 'asc' },
+        include: { options: true },
+      }),
+      this.prisma.sessionAnswer.findMany({
+        where: { sessionId },
+        include: { question: true, option: true },
+      }),
+    ]);
+
+    const answeredByKey = new Map<string, string>();
+    for (const answer of answers) {
+      answeredByKey.set(answer.question.key, answer.option?.key ?? '__free__');
+    }
+
+    const candidates = questions.filter((q) => {
+      if (answeredByKey.has(q.key)) return false;
+      return this.shouldAskQuestion(
+        {
+          askIfEquals: q.askIfEquals,
+          askIfNotEquals: q.askIfNotEquals,
+          askIfIn: q.askIfIn,
+          askIfNotIn: q.askIfNotIn,
+        },
+        answeredByKey,
+      );
+    });
+
+    const situationAnswered = answeredByKey.has('situation');
+    return {
+      answered: answers.length,
+      total: situationAnswered ? answers.length + candidates.length : null,
+    };
   }
 
   // ─── Sauvegarde des réponses ──────────────────────────────────────────────
@@ -267,10 +429,19 @@ export class QuestionnaireService {
     // 4. Génère les rationales et le portrait en parallèle (Phase 2 produit).
     //    Les deux appels IA tournent en même temps via Promise.all : la latence
     //    totale = max(rationales, portrait) au lieu de la somme.
-    const formattedAnswers = session.answers.map((a) => ({
-      question: a.question.text,
-      answer: a.option?.label ?? a.freeText ?? '',
-    }));
+    const formattedAnswers: Array<{ question: string; answer: string }> = [];
+    for (const a of session.answers) {
+      formattedAnswers.push({
+        question: a.question.text,
+        answer: a.option?.label ?? a.freeText ?? '',
+      });
+      if (a.followUpQuestion && a.followUpAnswer) {
+        formattedAnswers.push({
+          question: a.followUpQuestion,
+          answer: a.followUpAnswer,
+        });
+      }
+    }
 
     const rationaleInput: RationaleInput = {
       topJobs: detailedMatches.slice(0, 3).map((m) => ({
@@ -327,6 +498,74 @@ export class QuestionnaireService {
     ]);
 
     return { sessionId, matches: finalMatches, portrait };
+  }
+
+  // ─── Retour en arrière dans le questionnaire ─────────────────────────────
+
+  /**
+   * Supprime la réponse à `questionKey` ainsi que toutes les réponses
+   * ultérieures (comparaison sur createdAt).
+   *
+   * Permet à l'utilisateur de revenir sur une question déjà répondue sans
+   * laisser des réponses incohérentes en base — l'IA de sélection de la
+   * prochaine question travaillera sur un état propre.
+   *
+   * La session doit être ACTIVE (pas encore finalisée).
+   */
+  async goBackToQuestion(
+    sessionId: string,
+    questionKey: string,
+  ): Promise<{ deleted: number }> {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) throw new NotFoundException('Session introuvable');
+    if (session.status !== SessionStatus.ACTIVE) {
+      throw new BadRequestException(
+        'La session est terminée, impossible de revenir en arrière.',
+      );
+    }
+
+    // ── Phase 6 : goBack sur une relance (__followup) ────────────────────────
+    // On efface uniquement followUpAnswer sur la question parente (on conserve
+    // followUpQuestion pour pouvoir ré-afficher la relance si l'utilisateur
+    // revient dessus via l'historique frontend).
+    if (questionKey.endsWith('__followup')) {
+      const parentKey = questionKey.replace('__followup', '');
+      const parentQuestion = await this.prisma.question.findUnique({
+        where: { key: parentKey },
+      });
+      if (!parentQuestion) return { deleted: 0 };
+
+      await this.prisma.sessionAnswer.updateMany({
+        where: { sessionId, questionId: parentQuestion.id },
+        data: { followUpAnswer: null },
+      });
+      return { deleted: 0 };
+    }
+
+    // ── Cas normal : suppression de la réponse et de toutes les suivantes ────
+    const question = await this.prisma.question.findUnique({
+      where: { key: questionKey },
+    });
+    if (!question) throw new NotFoundException('Question introuvable');
+
+    const answer = await this.prisma.sessionAnswer.findUnique({
+      where: { sessionId_questionId: { sessionId, questionId: question.id } },
+    });
+
+    if (!answer) {
+      return { deleted: 0 };
+    }
+
+    const result = await this.prisma.sessionAnswer.deleteMany({
+      where: {
+        sessionId,
+        createdAt: { gte: answer.createdAt },
+      },
+    });
+
+    return { deleted: result.count };
   }
 
   // ─── Phase 4 : notation et raffinement ───────────────────────────────────
@@ -484,10 +723,19 @@ export class QuestionnaireService {
     const situation = situationAnswer?.option?.key ?? 'actif';
     const userContext = deriveUserContext(situation);
 
-    const formattedAnswers = session.answers.map((a) => ({
-      question: a.question.text,
-      answer: a.option?.label ?? a.freeText ?? '',
-    }));
+    const formattedAnswers: Array<{ question: string; answer: string }> = [];
+    for (const a of session.answers) {
+      formattedAnswers.push({
+        question: a.question.text,
+        answer: a.option?.label ?? a.freeText ?? '',
+      });
+      if (a.followUpQuestion && a.followUpAnswer) {
+        formattedAnswers.push({
+          question: a.followUpQuestion,
+          answer: a.followUpAnswer,
+        });
+      }
+    }
 
     // Appel IA avec signal de préférence
     const result = await this.ai.rankJobsWithPreferences({

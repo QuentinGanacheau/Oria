@@ -50,9 +50,16 @@ type AnswerPayload = {
   freeText?: string;
 };
 
+type HistoryEntry = {
+  question: Question;
+  prefilledDraft: string;
+  prefilledSuggestions: Map<string, string>;
+};
+
 export default function QuestionnairePage() {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [progress, setProgress] = useState<Progress>({ answered: 0, total: null });
@@ -82,21 +89,41 @@ export default function QuestionnairePage() {
   const hasEmailRef = useRef(false);
   const finishLock = useRef(false);
   const currentQuestionRef = useRef<Question | null>(null);
+  // Empêche le useEffect de vider draft/suggestions lors d'un goBack (pré-remplissage).
+  const skipClearOnQuestionChange = useRef(false);
   useEffect(() => {
     currentQuestionRef.current = question;
-    // Vider le brouillon et les chips à chaque changement de question
+    if (skipClearOnQuestionChange.current) {
+      skipClearOnQuestionChange.current = false;
+      return;
+    }
     setDraft("");
     setSelectedSuggestions(new Map());
   }, [question]);
 
   const fetchNext = useCallback(
-    async (payload: AnswerPayload, humanValue: string) => {
+    async (
+      payload: AnswerPayload,
+      humanValue: string,
+      prefill: { draft: string; suggestions: Map<string, string> },
+    ) => {
       setLoading(true);
       setError(null);
+      const questionAtSubmit = currentQuestionRef.current;
       try {
         const data = await apiPost<NextResponse>("/v1/questionnaire/next", payload);
         const nextAnswers = { ...answers, [payload.questionKey]: humanValue };
         setAnswers(nextAnswers);
+        if (questionAtSubmit) {
+          setHistory((prev) => [
+            ...prev,
+            {
+              question: questionAtSubmit,
+              prefilledDraft: prefill.draft,
+              prefilledSuggestions: prefill.suggestions,
+            },
+          ]);
+        }
         setComplete(data.complete);
         setQuestion(data.question);
         setProgress(data.progress);
@@ -132,6 +159,36 @@ export default function QuestionnairePage() {
     },
     [answers, router],
   );
+
+  const goBack = useCallback(async () => {
+    if (!sessionId || !question || loading || history.length === 0) return;
+    const currentKey = question.id;
+    const prevEntry = history[history.length - 1];
+    setLoading(true);
+    setError(null);
+    try {
+      // Si la question courante a déjà été répondue (retour multiple),
+      // supprimer sa réponse en DB ainsi que toutes les suivantes.
+      if (answers[currentKey] !== undefined) {
+        await apiPost(`/v1/questionnaire/${sessionId}/back`, { questionKey: currentKey });
+        setAnswers((prev) => {
+          const next = { ...prev };
+          delete next[currentKey];
+          return next;
+        });
+      }
+      setHistory((h) => h.slice(0, -1));
+      skipClearOnQuestionChange.current = true;
+      setQuestion(prevEntry.question);
+      setDraft(prevEntry.prefilledDraft);
+      setSelectedSuggestions(prevEntry.prefilledSuggestions);
+      setProgress((p) => ({ answered: Math.max(0, p.answered - 1), total: p.total }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur réseau");
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, question, loading, history, answers]);
 
   const retryMatch = useCallback(async () => {
     if (!aiError) return;
@@ -208,6 +265,7 @@ export default function QuestionnairePage() {
     setComplete(false);
     setQuestion(null);
     setAnswers({});
+    setHistory([]);
     setSessionId(null);
     setProgress({ answered: 0, total: null });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -237,12 +295,9 @@ export default function QuestionnairePage() {
     const currentQuestion = currentQuestionRef.current;
     if (!currentQuestion || !sessionId || loading) return;
     void fetchNext(
-      {
-        sessionId,
-        questionKey: currentQuestion.id,
-        optionKey: optionId,
-      },
+      { sessionId, questionKey: currentQuestion.id, optionKey: optionId },
       optionLabel,
+      { draft: "", suggestions: new Map() },
     );
   };
 
@@ -255,12 +310,9 @@ export default function QuestionnairePage() {
       return;
     }
     void fetchNext(
-      {
-        sessionId,
-        questionKey: currentQuestion.id,
-        freeText: text,
-      },
+      { sessionId, questionKey: currentQuestion.id, freeText: text },
       text,
+      { draft: text, suggestions: new Map() },
     );
   };
 
@@ -287,12 +339,9 @@ export default function QuestionnairePage() {
     }
     const composed = parts.join(". ");
     void fetchNext(
-      {
-        sessionId,
-        questionKey: currentQuestion.id,
-        freeText: composed,
-      },
+      { sessionId, questionKey: currentQuestion.id, freeText: composed },
       composed,
+      { draft: draft.trim(), suggestions: new Map(selectedSuggestions) },
     );
   };
 
@@ -389,6 +438,17 @@ export default function QuestionnairePage() {
         )}
 
         {question && !complete && (
+          <>
+          {history.length > 0 && !pendingMatch && !aiError && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void goBack()}
+              className="w-fit text-sm text-slate-500 hover:text-slate-700 disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              ← Précédent
+            </button>
+          )}
           <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h1 className="text-xl font-semibold leading-snug">{question.text}</h1>
             {question.helperText && (
@@ -478,6 +538,7 @@ export default function QuestionnairePage() {
               </div>
             )}
           </div>
+          </>
         )}
 
         {loading && question && (

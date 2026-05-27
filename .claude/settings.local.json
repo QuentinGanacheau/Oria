@@ -6,7 +6,14 @@
       "Bash(cat vitest.config.js)",
       "Bash(npx vitest *)",
       "Bash(npm run *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"E:\\\\Work\\\\FindYourJob\\\\apps\\\\api\\\\src\" -Filter \"*.spec.ts\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Read(//c/Users/slaye/.claude//**)",
+      "Read(//c/Users/slaye/.claude/**)",
+      "Bash(node -e \"const v = require\\('vitest/package.json'\\); console.log\\(v.version\\)\")",
+      "Bash(npm install *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

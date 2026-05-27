@@ -11,6 +11,18 @@ import type {
 
 type TrackRecord<T> = Record<UserTrack, T>;
 
+// ── Phase 6 : relances mock par question ─────────────────────────────────────
+// Une relance par question éligible — ancrée dans ce que l'utilisateur pourrait
+// avoir écrit, suffisamment ambiguë pour être utile à l'orientation.
+// null = pas de relance (simule le cas où l'IA juge la réponse déjà complète).
+export const MOCK_FOLLOW_UP_QUESTIONS: Record<string, string | null> = {
+  passion_centrale: "C'est quelque chose que tu imagines faire en travail ou plutôt en loisir ?",
+  metier_actuel: 'Dans ce que tu fais, la partie que tu referais sans hésiter — elle ressemble à quoi ?',
+  ce_qui_pese: 'Ce que tu décris, c\'est lié aux missions elles-mêmes ou à l\'environnement autour ?',
+  ce_qui_garde: null,
+  journee_ideale: 'Dans cette journée, tu serais plutôt seul·e ou en interaction avec des gens ?',
+};
+
 // ── Plans d'action (Phase 5) ──────────────────────────────────────────────────
 
 const MOCK_ACTION_PLANS: Record<UserTrack, ActionPlan> = {

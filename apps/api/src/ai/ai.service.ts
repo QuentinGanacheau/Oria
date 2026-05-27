@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  MOCK_FOLLOW_UP_QUESTIONS,
   MOCK_PERSONALIZED_SHEET,
   MOCK_PORTRAITS,
   MOCK_RANK_WITH_PREFERENCES,
@@ -691,6 +692,61 @@ export class AiService {
    *
    * Température 0.2 : cohérence prioritaire sur la créativité.
    */
+  /**
+   * Génère une question de relance pour approfondir une réponse texte libre.
+   *
+   * Appelée inline dans `answerAndGetNext` après la sauvegarde de la réponse
+   * parente. Retourne null si la réponse n'est pas suffisamment riche pour
+   * mériter un approfondissement (réponse trop courte, trop vague, ou déjà
+   * bien complète).
+   *
+   * Température 0.6 : il faut de la variété et un ton conversationnel naturel.
+   */
+  async generateFollowUp(input: {
+    questionKey: string;
+    parentQuestion: string;
+    answer: string;
+    userContext: UserContext;
+  }): Promise<string | null> {
+    if (this.mockMode) {
+      return MOCK_FOLLOW_UP_QUESTIONS[input.questionKey] ?? null;
+    }
+    if (!this.provider) return null;
+
+    const prompt = [
+      "Tu es un conseiller d'orientation. Tu lis la réponse d'un utilisateur à une question.",
+      '',
+      `Question : "${input.parentQuestion}"`,
+      `Réponse : "${input.answer}"`,
+      '',
+      'Décide si une relance est utile. Elle est utile UNIQUEMENT si la réponse contient',
+      'un mot ou une expression AMBIGU dont le sens changerait les métiers à recommander.',
+      'Exemples de bonne relance : "Tu parles de gérer les gens — plutôt les accompagner ou les diriger ?",',
+      '"Ce côté créatif, c\'est surtout visuel ou plutôt conceptuel ?"',
+      '',
+      'Ne pose PAS de relance si :',
+      "- La réponse est claire et ne contient pas d'ambiguïté utile pour l'orientation.",
+      "- Tu dois deviner ou supposer quelque chose que la personne n'a pas écrit.",
+      '- Tu reformules juste la question de départ.',
+      '- La réponse est courte et factuelle.',
+      '',
+      "RÈGLE ABSOLUE : ta question doit citer ou paraphraser un mot que l'utilisateur a réellement écrit.",
+      "Si tu ne trouves pas d'ambiguïté dans le texte, retourne null.",
+      '',
+      'Format : {"followUp": "Ta question (max 12 mots, tutoiement)"} ou {"followUp": null}',
+      "Retourne UNIQUEMENT ce JSON, rien d'autre.",
+    ].join('\n');
+
+    const parsed = await this.askJson<{ followUp?: string | null }>(
+      prompt,
+      0.3,
+    );
+    if (!parsed) return null;
+    if (!parsed.followUp || typeof parsed.followUp !== 'string') return null;
+    const trimmed = parsed.followUp.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
   async rankJobsWithPreferences(
     input: RankWithPreferencesInput,
   ): Promise<RankWithPreferencesResult | null> {
