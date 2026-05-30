@@ -90,8 +90,36 @@ model QuestionnaireSession {
   answers   SessionAnswer[]
   matches   MatchResult[]
   ratings   JobRating[]
+  refinedBatches RefinedBatch[]
 
   @@index([email])
+}
+
+/// Un "batch" de résultats affinés généré par l'IA à partir des notes
+/// accumulées (swipe deck — batches progressifs).
+///
+/// La passe 1 gratuite vit dans `MatchResult` (rank 1-10). Les batches affinés
+/// commencent donc à `batchNumber = 2`. Chaque appel à `generateNextBatch`
+/// crée une ligne ici : c'est le cache (un batch n'est jamais recalculé) ET
+/// l'historique permettant d'exclure les métiers déjà servis du batch suivant.
+model RefinedBatch {
+  id          String   @id @default(cuid())
+  sessionId   String
+  /// Index global du batch. 1 = passe gratuite (dans MatchResult), 2+ = ici.
+  batchNumber Int
+  /// Array<MatchOutput> hydraté (job complet + score + rationale), figé au moment
+  /// de la génération — même structure que ce que le frontend stocke en local.
+  matches     Json
+  /// Phrase IA d'introduction du batch ("Tu apprécies les métiers qui…").
+  insight     String?
+  /// Nombre total de notes de la session au moment de générer ce batch.
+  /// Sert de garde-fou anti-spam : on exige N nouvelles notes avant le batch suivant.
+  ratingsAtCreation Int @default(0)
+  createdAt   DateTime @default(now())
+  session     QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, batchNumber])
+  @@index([sessionId])
 }
 
 /// Note posée par l'utilisateur sur un métier après avoir vu ses résultats.

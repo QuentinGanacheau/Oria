@@ -8,10 +8,12 @@ import {
 import { Prisma, SessionStatus } from '@prisma/client';
 import {
   AiService,
+  type DislikedJobInput,
   type PortraitContent,
   type RationaleInput,
+  type RefinedJobInput,
 } from '../ai/ai.service';
-import { deriveUserContext } from '../ai/user-context';
+import { deriveUserContext, type UserContext } from '../ai/user-context';
 import { JobsService, type JobProfile } from '../jobs/jobs.service';
 import { MatchingService } from '../matching/matching.service';
 import type { MatchingAnswer } from '../matching/matching.types';
@@ -49,6 +51,41 @@ type MatchOutput = {
   rationale: string | null;
 };
 
+/**
+ * Sous-ensemble d'une session nécessaire au raffinement (notes + réponses).
+ * Typé structurellement pour que `prepareRefinement` soit réutilisable par
+ * `refineResults` (legacy, vue liste) et `generateNextBatch` (swipe deck).
+ */
+type RefinementSession = {
+  ratings: Array<{ jobSlug: string; rating: string; reason: string | null }>;
+  answers: Array<{
+    question: { key: string; text: string };
+    option: { key: string; label: string } | null;
+    freeText: string | null;
+    followUpQuestion: string | null;
+    followUpAnswer: string | null;
+  }>;
+};
+
+/** Entrées préparées pour un appel `rankJobsWithPreferences`. */
+type PreparedRefinement = {
+  candidates: Array<{ code: string; libelle: string }>;
+  formattedAnswers: Array<{ question: string; answer: string }>;
+  likedEnriched: RefinedJobInput[];
+  dislikedEnriched: DislikedJobInput[];
+  userContext: UserContext;
+};
+
+/** Réponse de `generateNextBatch` (swipe deck — batches progressifs). */
+type NextBatchResult = {
+  /** Index global du batch (2+ pour les batches affinés). */
+  batchNumber: number;
+  matches: MatchOutput[];
+  insight: string;
+  /** false → l'utilisateur a atteint le plafond ou il n'y a plus de candidats. */
+  hasMore: boolean;
+};
+
 @Injectable()
 export class QuestionnaireService {
   private readonly logger = new Logger(QuestionnaireService.name);
@@ -78,6 +115,18 @@ export class QuestionnaireService {
       progress,
     };
   }
+
+  // ── Plafonds du raffinement progressif (swipe deck) ──────────────────────
+  /** Nombre max de batches affinés générés par session (plafond coût IA). */
+  private static readonly MAX_REFINED_BATCHES = 5;
+  /** Notes supplémentaires requises depuis le dernier batch avant d'en générer un nouveau. */
+  private static readonly MIN_NEW_RATINGS = 3;
+  /** Premier numéro de batch affiné (1 = passe gratuite, stockée dans MatchResult). */
+  private static readonly FIRST_REFINED_BATCH = 2;
+  /** Taille d'un batch affiné. */
+  private static readonly REFINED_BATCH_SIZE = 5;
+  /** Candidats max envoyés à l'IA pour le reranking d'un batch. */
+  private static readonly REFINE_CANDIDATE_POOL = 30;
 
   /**
    * Questions texte libre éligibles à une relance IA (Phase 6).
@@ -640,20 +689,196 @@ export class QuestionnaireService {
       };
     }
 
-    // Prépare les notes liked/disliked
-    const likedJobs = session.ratings
+    // Candidats + signal de préférence (exclut les métiers de la passe 1).
+    const excludeSlugs = new Set(session.matches.map((m) => m.jobSlug));
+    const prep = await this.prepareRefinement(session, excludeSlugs);
+    if (prep.candidates.length === 0) {
+      throw new ServiceUnavailableException(
+        'Pas assez de nouveaux métiers disponibles pour affiner les résultats.',
+      );
+    }
+
+    const result = await this.ai.rankJobsWithPreferences({
+      candidates: prep.candidates,
+      answers: prep.formattedAnswers,
+      likedJobs: prep.likedEnriched,
+      dislikedJobs: prep.dislikedEnriched,
+      userContext: prep.userContext,
+    });
+    if (!result) {
+      throw new ServiceUnavailableException(
+        "L'IA est temporairement indisponible. Réessaie dans quelques minutes.",
+      );
+    }
+
+    // Vue liste (legacy) : pas de rationales sur la 2e passe.
+    const ranked = this.rankTopCandidates(prep.candidates, result.scores);
+    const detailedMatches = await this.hydrateBatch(ranked, null);
+
+    // Persiste en cache (colonnes legacy de QuestionnaireSession).
+    await this.prisma.questionnaireSession.update({
+      where: { id: sessionId },
+      data: {
+        refinedMatches: detailedMatches as unknown as Prisma.InputJsonValue,
+        refineInsight: result.insight,
+      },
+    });
+
+    return { matches: detailedMatches, insight: result.insight };
+  }
+
+  // ─── Swipe deck : batches progressifs ────────────────────────────────────
+
+  /**
+   * Génère le prochain batch de métiers affinés (swipe deck).
+   *
+   * Contrairement à `refineResults` (un seul batch, vue liste), cette méthode
+   * produit des batches successifs, chacun :
+   *   - excluant TOUS les métiers déjà servis (passe 1 + batches précédents),
+   *   - re-priorisé par l'IA sur l'ensemble des notes accumulées,
+   *   - accompagné de rationales (contrairement à la vue liste).
+   *
+   * Garde-fous :
+   *   - paiement requis (ou DEV_BYPASS_PAYMENT),
+   *   - plafond `MAX_REFINED_BATCHES` (coût IA),
+   *   - `MIN_NEW_RATINGS` nouvelles notes exigées depuis le dernier batch.
+   *
+   * Dégradation : si plus aucun candidat ou plafond atteint, retourne
+   * `hasMore: false` avec un batch vide plutôt qu'une erreur — le frontend
+   * affiche alors l'écran "tu as fait le tour".
+   *
+   * @throws BadRequestException si non payé ou pas assez de nouvelles notes
+   * @throws ServiceUnavailableException si l'IA est indisponible
+   */
+  async generateNextBatch(sessionId: string): Promise<NextBatchResult> {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        matches: true,
+        answers: { include: { question: true, option: true } },
+        ratings: true,
+        refinedBatches: { orderBy: { batchNumber: 'asc' } },
+      },
+    });
+    if (!session) throw new NotFoundException('Session introuvable.');
+
+    // ⚠️ DEV_BYPASS_PAYMENT=true ne doit jamais être activé en production.
+    const devBypass = process.env.DEV_BYPASS_PAYMENT === 'true';
+    if (!session.isPaid && !devBypass) {
+      throw new BadRequestException(
+        'Les batches affinés sont une fonctionnalité payante.',
+      );
+    }
+
+    const existing = session.refinedBatches;
+    const lastBatch = existing[existing.length - 1];
+    const lastBatchNumber =
+      lastBatch?.batchNumber ?? QuestionnaireService.FIRST_REFINED_BATCH - 1;
+
+    // Plafond de coût IA atteint.
+    if (existing.length >= QuestionnaireService.MAX_REFINED_BATCHES) {
+      return {
+        batchNumber: lastBatchNumber,
+        matches: [],
+        insight: '',
+        hasMore: false,
+      };
+    }
+
+    // Garde-fou anti-spam : il faut N nouvelles notes depuis le dernier batch.
+    const totalRatings = session.ratings.length;
+    const baseline = lastBatch?.ratingsAtCreation ?? 0;
+    if (totalRatings - baseline < QuestionnaireService.MIN_NEW_RATINGS) {
+      throw new BadRequestException(
+        'Note encore quelques métiers pour débloquer un nouveau batch.',
+      );
+    }
+
+    // Exclusion cumulée : passe 1 (MatchResult) + tous les batches déjà servis.
+    const excludeSlugs = new Set<string>(session.matches.map((m) => m.jobSlug));
+    for (const batch of existing) {
+      for (const m of (batch.matches as unknown as MatchOutput[]) ?? []) {
+        if (m?.job?.slug) excludeSlugs.add(m.job.slug);
+      }
+    }
+
+    const prep = await this.prepareRefinement(session, excludeSlugs);
+    // Plus de candidats disponibles → fin de parcours (pas une erreur).
+    if (prep.candidates.length === 0) {
+      return {
+        batchNumber: lastBatchNumber,
+        matches: [],
+        insight: '',
+        hasMore: false,
+      };
+    }
+
+    const result = await this.ai.rankJobsWithPreferences({
+      candidates: prep.candidates,
+      answers: prep.formattedAnswers,
+      likedJobs: prep.likedEnriched,
+      dislikedJobs: prep.dislikedEnriched,
+      userContext: prep.userContext,
+    });
+    if (!result) {
+      throw new ServiceUnavailableException(
+        "L'IA est temporairement indisponible. Réessaie dans quelques minutes.",
+      );
+    }
+
+    const ranked = this.rankTopCandidates(prep.candidates, result.scores);
+
+    // Rationales pour le batch (un seul appel IA pour les N métiers du batch).
+    const rationales = await this.ai.generateRationales({
+      topJobs: ranked.map((r) => ({ slug: r.code, title: r.libelle })),
+      answers: prep.formattedAnswers,
+      userContext: prep.userContext,
+    });
+
+    const detailedMatches = await this.hydrateBatch(ranked, rationales);
+    const batchNumber = lastBatchNumber + 1;
+
+    // Persiste le batch : c'est à la fois le cache et l'historique d'exclusion.
+    await this.prisma.refinedBatch.create({
+      data: {
+        sessionId,
+        batchNumber,
+        matches: detailedMatches as unknown as Prisma.InputJsonValue,
+        insight: result.insight,
+        ratingsAtCreation: totalRatings,
+      },
+    });
+
+    return {
+      batchNumber,
+      matches: detailedMatches,
+      insight: result.insight,
+      hasMore: existing.length + 1 < QuestionnaireService.MAX_REFINED_BATCHES,
+    };
+  }
+
+  // ─── Helpers de raffinement (partagés refine ⇄ next-batch) ────────────────
+
+  /**
+   * Prépare les entrées IA communes au raffinement : sélection des candidats
+   * (hors `excludeSlugs`) dans les domaines des métiers aimés, et signal de
+   * préférence (liked/disliked enrichis des libellés ROME).
+   *
+   * Ne fait AUCun appel IA et ne lève pas d'exception sur l'absence de
+   * candidats — l'appelant décide quoi faire d'un tableau `candidates` vide.
+   */
+  private async prepareRefinement(
+    session: RefinementSession,
+    excludeSlugs: Set<string>,
+  ): Promise<PreparedRefinement> {
+    const likedSlugs = session.ratings
       .filter((r) => r.rating === 'like')
-      .map((r) => ({ code: r.jobSlug, libelle: r.jobSlug }));
+      .map((r) => r.jobSlug);
+    const dislikedRatings = session.ratings.filter(
+      (r) => r.rating === 'dislike',
+    );
 
-    const dislikedJobs = session.ratings
-      .filter((r) => r.rating === 'dislike')
-      .map((r) => ({
-        code: r.jobSlug,
-        libelle: r.jobSlug,
-        reason: r.reason ?? null,
-      }));
-
-    // Enrichit les libellés des métiers notés depuis la DB ROME
+    // Enrichit les libellés + domaines des métiers notés depuis la DB ROME.
     const ratedSlugs = session.ratings.map((r) => r.jobSlug);
     const ratedRomeJobs = await this.prisma.romeJob.findMany({
       where: { code: { in: ratedSlugs } },
@@ -664,64 +889,58 @@ export class QuestionnaireService {
       ratedRomeJobs.map((j) => [j.code, j.codeGrandDomaine]),
     );
 
-    const likedEnriched = likedJobs.map((j) => ({
-      code: j.code,
-      libelle: libelleMap.get(j.code) ?? j.code,
+    const likedEnriched: RefinedJobInput[] = likedSlugs.map((code) => ({
+      code,
+      libelle: libelleMap.get(code) ?? code,
     }));
-    const dislikedEnriched = dislikedJobs.map((j) => ({
-      code: j.code,
-      libelle: libelleMap.get(j.code) ?? j.code,
-      reason: j.reason,
+    const dislikedEnriched: DislikedJobInput[] = dislikedRatings.map((r) => ({
+      code: r.jobSlug,
+      libelle: libelleMap.get(r.jobSlug) ?? r.jobSlug,
+      reason: r.reason,
     }));
 
-    // Domaines des liked → base des nouveaux candidats
-    const alreadySeenSlugs = new Set(session.matches.map((m) => m.jobSlug));
+    // Domaines de base = ceux des métiers aimés ; fallback = tous les notés.
     const likedDomains = [
       ...new Set(
-        likedJobs
-          .map((j) => domainMap.get(j.code))
+        likedSlugs
+          .map((code) => domainMap.get(code))
           .filter((d): d is string => !!d),
       ),
     ];
-
-    // Fallback si aucun liked : utilise les domaines des matches passe 1
     const sourceDomains =
       likedDomains.length > 0
         ? likedDomains
-        : [...new Set(
-            ratedRomeJobs
-              .map((j) => j.codeGrandDomaine)
-              .filter((d): d is string => !!d),
-          )];
+        : [
+            ...new Set(
+              ratedRomeJobs
+                .map((j) => j.codeGrandDomaine)
+                .filter((d): d is string => !!d),
+            ),
+          ];
 
-    // Nouveaux candidats — exclut tous les métiers déjà vus en passe 1
-    const newCandidateRows = await this.prisma.romeJob.findMany({
+    // Candidats : dans les domaines source, hors métiers déjà vus.
+    const candidateRows = await this.prisma.romeJob.findMany({
       where: {
-        codeGrandDomaine: { in: sourceDomains.length > 0 ? sourceDomains : undefined },
-        code: { notIn: [...alreadySeenSlugs] },
+        codeGrandDomaine:
+          sourceDomains.length > 0 ? { in: sourceDomains } : undefined,
+        code: { notIn: [...excludeSlugs] },
       },
       select: { code: true, libelle: true },
     });
 
-    // Shuffle + cap à 30 candidats pour le prompt IA
-    const shuffled = newCandidateRows
+    // Shuffle (Fisher-Yates léger) + cap pour le prompt IA.
+    const candidates = candidateRows
       .map((r) => ({ r, sort: Math.random() }))
       .sort((a, b) => a.sort - b.sort)
       .map(({ r }) => r)
-      .slice(0, 30);
+      .slice(0, QuestionnaireService.REFINE_CANDIDATE_POOL);
 
-    if (shuffled.length === 0) {
-      throw new ServiceUnavailableException(
-        'Pas assez de nouveaux métiers disponibles pour affiner les résultats.',
-      );
-    }
-
-    // UserContext depuis la situation
-    const situationAnswer = session.answers.find(
-      (a) => a.question.key === 'situation',
-    );
-    const situation = situationAnswer?.option?.key ?? 'actif';
-    const userContext = deriveUserContext(situation);
+    // UserContext dérivé de la clé `situation` (étudiant/pro) + réponses
+    // formatées pour le prompt (relances Phase 6 incluses).
+    const situationKey =
+      session.answers.find((a) => a.question.key === 'situation')?.option?.key ??
+      'actif';
+    const userContext = deriveUserContext(situationKey);
 
     const formattedAnswers: Array<{ question: string; answer: string }> = [];
     for (const a of session.answers) {
@@ -737,47 +956,43 @@ export class QuestionnaireService {
       }
     }
 
-    // Appel IA avec signal de préférence
-    const result = await this.ai.rankJobsWithPreferences({
-      candidates: shuffled,
-      answers: formattedAnswers,
-      likedJobs: likedEnriched,
-      dislikedJobs: dislikedEnriched,
+    return {
+      candidates,
+      formattedAnswers,
+      likedEnriched,
+      dislikedEnriched,
       userContext,
-    });
+    };
+  }
 
-    if (!result) {
-      throw new ServiceUnavailableException(
-        "L'IA est temporairement indisponible. Réessaie dans quelques minutes.",
-      );
-    }
-
-    // Top 5 candidats selon les scores IA
-    const ranked = shuffled
-      .map((c) => ({ code: c.code, libelle: c.libelle, score: result.scores[c.code] ?? 0 }))
+  /** Top N candidats par score IA (ordre décroissant). */
+  private rankTopCandidates(
+    candidates: Array<{ code: string; libelle: string }>,
+    scores: Record<string, number>,
+  ): Array<{ code: string; libelle: string; score: number }> {
+    return candidates
+      .map((c) => ({
+        code: c.code,
+        libelle: c.libelle,
+        score: scores[c.code] ?? 0,
+      }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+      .slice(0, QuestionnaireService.REFINED_BATCH_SIZE);
+  }
 
-    // Hydrate avec les détails complets
-    const detailedMatches = await Promise.all(
+  /** Hydrate les métiers classés avec la fiche complète + rationale optionnelle. */
+  private async hydrateBatch(
+    ranked: Array<{ code: string; libelle: string; score: number }>,
+    rationales: Record<string, string> | null,
+  ): Promise<MatchOutput[]> {
+    return Promise.all(
       ranked.map(async (m) => ({
         job: await this.jobs.findBySlug(m.code),
         score: m.score,
         scorePercent: m.score,
-        rationale: null as string | null,
+        rationale: rationales?.[m.code] ?? null,
       })),
     );
-
-    // Persiste en cache
-    await this.prisma.questionnaireSession.update({
-      where: { id: sessionId },
-      data: {
-        refinedMatches: detailedMatches as unknown as Prisma.InputJsonValue,
-        refineInsight: result.insight,
-      },
-    });
-
-    return { matches: detailedMatches, insight: result.insight };
   }
 
   /**
@@ -795,6 +1010,7 @@ export class QuestionnaireService {
       where: { id: sessionId },
       include: {
         matches: { orderBy: { rank: 'asc' } },
+        refinedBatches: { orderBy: { batchNumber: 'asc' } },
       },
     });
 
@@ -834,9 +1050,18 @@ export class QuestionnaireService {
       }),
     );
 
+    // Batches affinés (swipe deck) : déjà hydratés et figés en JSON à la
+    // génération — on les renvoie tels quels pour restauration côté frontend.
+    const refinedBatches = session.refinedBatches.map((b) => ({
+      batchNumber: b.batchNumber,
+      matches: b.matches as unknown as MatchOutput[],
+      insight: b.insight ?? '',
+    }));
+
     return {
       sessionId: session.id,
       matches,
+      refinedBatches,
       isPaid: session.isPaid,
       expiresAt: session.expiresAt?.toISOString() ?? null,
       portrait: this.parsePortrait(session.portrait),

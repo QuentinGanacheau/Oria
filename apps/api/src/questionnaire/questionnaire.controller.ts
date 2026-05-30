@@ -72,6 +72,21 @@ export class QuestionnaireController {
   }
 
   /**
+   * POST /v1/questionnaire/:sessionId/next-batch
+   *
+   * Génère le prochain batch de métiers affinés (swipe deck — batches
+   * progressifs). Chaque appel produit un batch excluant les métiers déjà vus.
+   * Protégé (session payée) + plafonné (MAX_REFINED_BATCHES, MIN_NEW_RATINGS).
+   *
+   * Retourne `{ batchNumber, matches, insight, hasMore }`. `hasMore: false`
+   * signale au frontend qu'il n'y a plus de batch à demander.
+   */
+  @Post(':sessionId/next-batch')
+  nextBatch(@Param('sessionId') sessionId: string) {
+    return this.questionnaire.generateNextBatch(sessionId);
+  }
+
+  /**
    * GET /v1/questionnaire/:sessionId/results?email=xxx
    *
    * Restaure les résultats d'une session depuis la DB via un lien email.

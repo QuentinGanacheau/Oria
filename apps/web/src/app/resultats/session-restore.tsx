@@ -7,6 +7,7 @@ import {
   saveSession,
   setUnlocked,
   type StoredPortrait,
+  type StoredRefinedBatch,
   type StoredSession,
 } from "@/lib/storage";
 
@@ -29,6 +30,8 @@ import {
 type RestoreResponse = {
   sessionId: string;
   matches: StoredSession["matches"];
+  /** Paquets affinés (swipe deck) déjà générés pour cette session. */
+  refinedBatches?: StoredRefinedBatch[];
   isPaid: boolean;
   expiresAt: string | null;
   /** Portrait IA (Phase 2) — null si non généré ou IA indisponible. */
@@ -71,8 +74,12 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
         hasEmail: true,
         portrait: data.portrait,
         ratings: {},           // Les notes ne sont pas persistées en DB
-        refinedMatches: null,  // À re-générer si besoin
+        refinedMatches: null,  // Vue liste (legacy) — à re-générer si besoin
         refineInsight: null,
+        // Vue swipe : restaure les paquets affinés déjà stockés en DB.
+        // hasMore reste indéfini → le 1er round-end après restauration
+        // appellera /next-batch qui dira si d'autres paquets sont possibles.
+        batches: data.refinedBatches ?? [],
       });
 
       // Restaure le statut "débloqué" si l'utilisateur avait payé

@@ -17,6 +17,8 @@ export type SwipeCardData = {
   tagline: string;
   /** Score d'adéquation 0-100. */
   scorePercent: number;
+  /** Description courte du métier ("En bref") — affiché sur mobile et desktop. */
+  summary?: string | null;
   /** Explication IA. Null/absent si indisponible. */
   rationale?: string | null;
   /** Champs détaillés — surtout affichés sur desktop (plus d'espace). */
@@ -44,19 +46,31 @@ export default function SwipeCard({ data, rank, onOpenSheet }: Props) {
         </span>
       </div>
 
-      {/* Corps — défile si le contenu desktop dépasse la hauteur de carte */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 py-5">
+      {/* Corps — touch-pan-y pour laisser les swipes horizontaux remonter à
+          la motion.div parente sur mobile (sinon overflow-y-auto capture les
+          touches et seul le bandeau du haut reste glissable). Le scroll
+          vertical n'est activé qu'à partir de md (où la carte est plus haute). */}
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 py-5 md:overflow-y-auto"
+        style={{ touchAction: "pan-y" }}
+      >
         <h2 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl dark:text-white">
           {data.title}
         </h2>
         <p className="text-slate-600 dark:text-slate-300">{data.tagline}</p>
 
+        {data.summary && (
+          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+            {data.summary}
+          </p>
+        )}
+
         {data.rationale && (
-          <div className="mt-1 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 dark:border-indigo-900/50 dark:bg-indigo-950/30">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
+          <div className="hidden md:block">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-400 dark:text-indigo-500">
               Pourquoi ce métier te correspond
             </p>
-            <p className="mt-1 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            <p className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
               {data.rationale}
             </p>
           </div>

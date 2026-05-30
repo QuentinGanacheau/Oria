@@ -13,26 +13,41 @@ export interface StoredPortrait {
   drains: string;
 }
 
+/** Un match métier tel que retourné par l'API et stocké en sessionStorage. */
+export interface StoredMatch {
+  job: {
+    slug: string;
+    title: string;
+    tagline: string;
+    summary: string;
+    missions: string[];
+    skills: string[];
+    formations: string[];
+    salaryRangeHint: string;
+    workContext: string;
+  };
+  score: number;
+  scorePercent: number;
+  /** Explication personnalisée générée par l'IA. Absent si IA désactivée. */
+  rationale?: string | null;
+}
+
+/**
+ * Un paquet de métiers affinés reçu après notation (swipe deck).
+ * Chaque appel à `/next-batch` côté backend produit un de ces paquets.
+ */
+export interface StoredRefinedBatch {
+  /** Index global du paquet — 2 pour le 1er paquet affiné (1 = passe gratuite). */
+  batchNumber: number;
+  matches: StoredMatch[];
+  /** Phrase IA affichée en transition entre deux paquets. */
+  insight: string;
+}
+
 export interface StoredSession {
   sessionId: string;
   answers: Record<string, string>;
-  matches: {
-    job: {
-      slug: string;
-      title: string;
-      tagline: string;
-      summary: string;
-      missions: string[];
-      skills: string[];
-      formations: string[];
-      salaryRangeHint: string;
-      workContext: string;
-    };
-    score: number;
-    scorePercent: number;
-    /** Explication personnalisée générée par l'IA. Absent si IA désactivée. */
-    rationale?: string | null;
-  }[];
+  matches: StoredMatch[];
   /**
    * L'utilisateur a fourni son email lors de la capture post-questionnaire.
    * Utilisé côté frontend pour décider si le bouton de paiement est accessible
@@ -46,10 +61,22 @@ export interface StoredSession {
    * Clé = code ROME (ex: "M1805"), valeur = "like" | "dislike" | "neutral".
    */
   ratings: Record<string, 'like' | 'dislike' | 'neutral'>;
-  /** Résultats affinés de la 2e passe — null si pas encore générés. */
-  refinedMatches: StoredSession['matches'] | null;
-  /** Phrase d'insight IA accompagnant la 2e passe. */
+  /** Résultats affinés de la 2e passe (vue liste — legacy) — null si pas encore générés. */
+  refinedMatches: StoredMatch[] | null;
+  /** Phrase d'insight IA accompagnant la 2e passe (vue liste — legacy). */
   refineInsight: string | null;
+  /**
+   * Swipe deck : paquets affinés reçus successivement après notation.
+   * Chaque entrée vient d'un appel à `/next-batch` (1er paquet affiné après paiement).
+   * Absent ou vide tant que l'utilisateur n'a pas dépassé le paywall en mode deck.
+   */
+  batches?: StoredRefinedBatch[];
+  /**
+   * Swipe deck : false quand le backend signale qu'il n'y a plus de paquet
+   * à générer (plafond atteint ou plus de candidats). Absent/true = on peut
+   * encore en demander un.
+   */
+  hasMore?: boolean | null;
   savedAt: string;
 }
 

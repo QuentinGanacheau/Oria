@@ -10,6 +10,8 @@ import {
   setUnlocked,
   type StoredSession,
 } from "@/lib/storage";
+import { seedDevSession } from "@/lib/dev-seed";
+import AlertBanner from "@/components/alert-banner";
 import SessionRestore from "./session-restore";
 import InlineEmailCapture from "./inline-email-capture";
 import JobRatingButtons from "./job-rating-buttons";
@@ -23,6 +25,7 @@ export default function ResultatsClient() {
   const [refining, setRefining] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
+  const [verifyVariant, setVerifyVariant] = useState<"error" | "success">("error");
   /**
    * true → affiche le composant InlineEmailCapture avant de rediriger
    * vers Stripe (cas où l'utilisateur a skipé la capture email).
@@ -36,8 +39,11 @@ export default function ResultatsClient() {
 
   // Charge la session depuis localStorage au montage
   useEffect(() => {
+    if (process.env.NODE_ENV === "development" && searchParams.get("seed") === "1") {
+      seedDevSession();
+    }
     setSession(loadSession());
-  }, []);
+  }, [searchParams]);
 
   // Vérifie si Stripe est configuré côté API
   useEffect(() => {
@@ -69,11 +75,14 @@ export default function ResultatsClient() {
           if (current && !current.hasEmail) {
             setSession({ ...current, hasEmail: true });
           }
+          setVerifyVariant("success");
           setVerifyMsg("Paiement confirmé — classement complet débloqué.");
         } else {
+          setVerifyVariant("error");
           setVerifyMsg("Session de paiement non finalisée.");
         }
       } catch {
+        setVerifyVariant("error");
         setVerifyMsg("Impossible de vérifier le paiement.");
       }
     })();
@@ -308,9 +317,7 @@ export default function ResultatsClient() {
       )}
 
       {verifyMsg && (
-        <p className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-100">
-          {verifyMsg}
-        </p>
+        <AlertBanner message={verifyMsg} variant={verifyVariant} className="mt-6" />
       )}
 
       <ul className="mt-10 flex flex-col gap-6">

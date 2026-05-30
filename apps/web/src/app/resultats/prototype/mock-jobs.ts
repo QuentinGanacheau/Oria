@@ -14,6 +14,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Développeur·se full-stack",
     tagline: "Conçoit des applications web de bout en bout, du serveur à l'interface.",
     scorePercent: 92,
+    summary:
+      "Conçoit, développe et maintient des applications numériques : côté serveur (API, bases de données) comme côté interface (pages web, mobile). Travaille généralement en équipe dans une entreprise tech ou en agence.",
     rationale:
       "Ton goût pour résoudre des problèmes concrets et ton autonomie collent à un métier où l'on construit des produits du début à la fin.",
     missions: [
@@ -29,6 +31,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Concepteur·rice de contenus digitaux",
     tagline: "Imagine et produit des contenus pour le web et les réseaux.",
     scorePercent: 87,
+    summary:
+      "Produit des articles, visuels, vidéos et publications pour le web et les réseaux sociaux. Définit et fait vivre une ligne éditoriale en lien avec les objectifs de communication d'une marque ou d'un média.",
     rationale:
       "Tu as cité la créativité comme moteur — ce métier mélange production visuelle et stratégie éditoriale.",
     missions: [
@@ -44,6 +48,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Analyste d'études / Data analyst",
     tagline: "Transforme des données brutes en décisions concrètes.",
     scorePercent: 81,
+    summary:
+      "Collecte, nettoie et analyse des volumes de données pour en tirer des tendances ou indicateurs utiles à la prise de décision. Produit des tableaux de bord, des rapports et des recommandations pour les équipes métier.",
     rationale:
       "Ton attrait pour comprendre 'le pourquoi des choses' s'épanouit dans l'analyse de données.",
     missions: [
@@ -59,6 +65,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Enseignant·e / Formateur·rice",
     tagline: "Transmet des savoirs et accompagne la progression des autres.",
     scorePercent: 74,
+    summary:
+      "Prépare et anime des séquences pédagogiques pour transmettre des connaissances ou développer des compétences. Intervient dans l'éducation nationale, la formation professionnelle continue ou en tant qu'indépendant.",
     rationale:
       "Tu as dit aimer expliquer et voir les autres progresser — la transmission est au cœur de ce métier.",
     missions: [
@@ -74,6 +82,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Consultant·e en organisation",
     tagline: "Aide les entreprises à repenser leurs façons de travailler.",
     scorePercent: 69,
+    summary:
+      "Accompagne des organisations (entreprises, administrations) pour améliorer leurs processus, leur structure ou leur performance. Réalise des diagnostics, propose des plans d'action et pilote leur mise en œuvre.",
     rationale:
       "Ta capacité à prendre du recul et à structurer pourrait s'exprimer dans le conseil.",
     missions: [
@@ -89,6 +99,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Artisan·e / Métier manuel créatif",
     tagline: "Fabrique des objets de ses mains, du concept à la réalisation.",
     scorePercent: 63,
+    summary:
+      "Conçoit et fabrique des pièces uniques ou en petites séries en utilisant des savoir-faire manuels spécialisés (bois, cuir, céramique, métal, textile…). Peut exercer en atelier indépendant, en coopérative ou pour des galeries.",
     rationale:
       "Tu as évoqué l'envie de produire du concret et tangible — l'artisanat répond à ce besoin.",
     missions: [
@@ -104,6 +116,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Infirmier·ère",
     tagline: "Prend soin des patients au quotidien dans une équipe de santé.",
     scorePercent: 58,
+    summary:
+      "Assure les soins infirmiers, surveille l'état de santé des patients et coordonne les actions avec l'équipe médicale. Exerce à l'hôpital, en clinique, en EHPAD ou en libéral.",
     rationale:
       "Ton attrait pour le contact humain et l'utilité sociale trouve un débouché clair dans le soin.",
     missions: [
@@ -119,6 +133,8 @@ export const MOCK_JOBS: SwipeCardData[] = [
     title: "Chargé·e d'accueil / Tourisme",
     tagline: "Accueille, informe et oriente le public dans un cadre vivant.",
     scorePercent: 51,
+    summary:
+      "Accueille les visiteurs, gère les demandes d'information et coordonne les réservations dans des lieux touristiques, hôtels ou offices de tourisme. Premier point de contact, il ou elle représente l'image d'un lieu.",
     rationale:
       "Tu apprécies les environnements dynamiques et le contact — l'accueil correspond à ce profil.",
     missions: [
