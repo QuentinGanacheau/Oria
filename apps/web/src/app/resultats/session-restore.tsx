@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRight, Lock } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import {
   isUnlocked,
@@ -113,14 +114,16 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
 
   return (
     <div className="mx-auto max-w-md px-6 py-20">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-3xl border border-line bg-surface p-8 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)]">
         {/* Icône + titre */}
         <div className="text-center">
-          <p className="text-3xl">🔐</p>
-          <h1 className="mt-3 text-xl font-semibold tracking-tight">
+          <div className="mx-auto grid size-16 place-items-center rounded-full bg-accent-soft">
+            <Lock className="size-7 text-accent-ink" strokeWidth={1.7} />
+          </div>
+          <h1 className="mt-4 font-serif text-2xl tracking-tight">
             Retrouve tes résultats
           </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          <p className="mt-2 text-sm text-ink-soft">
             Entre l&apos;email que tu avais utilisé pour recevoir tes résultats.
           </p>
         </div>
@@ -129,7 +132,7 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
           <div>
             <label
               htmlFor="restore-email"
-              className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+              className="mb-1.5 block text-sm font-medium text-ink-soft"
             >
               Ton email
             </label>
@@ -143,12 +146,12 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-indigo-500 dark:focus:bg-slate-900"
+              className="w-full rounded-2xl border-[1.5px] border-line bg-surface-2 px-[18px] py-3.5 text-base outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
             />
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+            <p className="rounded-2xl border border-no/40 bg-no/10 px-4 py-3 text-sm text-no">
               {error}
             </p>
           )}
@@ -156,9 +159,10 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
           <button
             type="submit"
             disabled={!isEmailValid || loading}
-            className="rounded-full bg-indigo-600 px-6 py-3 font-medium text-white shadow transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="group inline-flex items-center justify-center gap-2 rounded-full bg-ink px-6 py-3.5 font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
           >
-            {loading ? "Vérification…" : "Accéder à mes résultats →"}
+            {loading ? "Vérification…" : "Accéder à mes résultats"}
+            {!loading && <ArrowRight className="size-4 transition-transform group-enabled:group-hover:translate-x-0.5" />}
           </button>
         </form>
       </div>

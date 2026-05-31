@@ -1,26 +1,54 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper:        #F0F2EB;  /* fond global (kraft clair) */
+  --surface:      #FFFFFF;  /* cartes */
+  --surface-2:    #F7F8FA;  /* surfaces secondaires / inputs */
+  --ink:          #15171D;  /* texte principal */
+  --ink-soft:     #3D424D;  /* texte secondaire */
+  --muted:        #6F7682;  /* texte tertiaire */
+  --line:         #E4E7EC;  /* bordures légères */
+  --line-strong:  #D3D9E0;  /* bordures marquées */
+  --panel:        #17161B;  /* panneaux foncés (CTA, pricing pro) */
+  --on-panel:     #F4F2ED;
+  --accent:       #1E7A4D;  /* VERT FORÊT — accent unique */
+  --accent-soft:  #DCEFE3;  /* fond accent clair */
+  --accent-ink:   #155C3A;  /* accent foncé (texte/icônes) */
+  --ok:           #1E7A4D;
+  --warn:         #B8862A;
+  --no:           #C0473B;  /* « passe » dans le swipe */
+}
+
+[data-mode="dark"] {
+  --paper:#0F1115; --surface:#181B21; --surface-2:#1E222A;
+  --ink:#EEF0F3; --ink-soft:#CCD2DA; --muted:#8B93A0;
+  --line:#272C35; --line-strong:#39404B;
+  --panel:#0C0E12; --on-panel:#EEF0F3;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  --accent-ink:  color-mix(in srgb, var(--accent) 58%, #FFFFFF);
+  --warn:#E9B949;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper:        var(--paper);
+  --color-surface:      var(--surface);
+  --color-surface-2:    var(--surface-2);
+  --color-ink:          var(--ink);
+  --color-ink-soft:     var(--ink-soft);
+  --color-muted:        var(--muted);
+  --color-line:         var(--line);
+  --color-line-strong:  var(--line-strong);
+  --color-panel:        var(--panel);
+  --color-on-panel:     var(--on-panel);
+  --color-accent:       var(--accent);
+  --color-accent-soft:  var(--accent-soft);
+  --color-accent-ink:   var(--accent-ink);
+  --color-ok:           var(--ok);
+  --color-warn:         var(--warn);
+  --color-no:           var(--no);
+  --font-serif:         var(--font-serif);
+  --font-sans:          var(--font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+body { background: var(--paper); color: var(--ink); font-family: var(--font-sans); }

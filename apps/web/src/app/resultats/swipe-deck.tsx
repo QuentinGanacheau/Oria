@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   animate,
   motion,
@@ -8,6 +8,7 @@ import {
   useTransform,
   type PanInfo,
 } from "framer-motion";
+import { RotateCcw, ThumbsDown, ThumbsUp } from "lucide-react";
 import SwipeCard, { type SwipeCardData } from "./swipe-card";
 
 export type SwipeDirection = "like" | "dislike" | "neutral";
@@ -37,6 +38,9 @@ export default function SwipeDeck({
   const [index, setIndex] = useState(0);
   // Verrou pendant l'animation de sortie (évite le double-swipe).
   const [animating, setAnimating] = useState(false);
+  // Compteurs locaux pour le tally (j'aime / passés).
+  const [likes, setLikes] = useState(0);
+  const [passes, setPasses] = useState(0);
 
   // Position de la carte du dessus, pilotée par le drag.
   const x = useMotionValue(0);
@@ -61,6 +65,8 @@ export default function SwipeDeck({
   const commit = (direction: SwipeDirection) => {
     const card = cards[index];
     if (card) onSwipe(card.slug, direction);
+    if (direction === "like") setLikes((v) => v + 1);
+    else setPasses((v) => v + 1);
     reset();
     const next = index + 1;
     setIndex(next);
@@ -84,13 +90,31 @@ export default function SwipeDeck({
     const width = typeof window !== "undefined" ? window.innerWidth : 600;
     const target = direction === "like" ? width * 1.2 : -width * 1.2;
     // Sortie en easeIn (départ lent → accélération) : la carte reste un instant
-    // au centre, le temps de lire le tampon OUI/NON, avant de filer hors écran.
+    // au centre, le temps de lire le tampon J'aime/Passe, avant de filer hors écran.
     animate(x, target, {
       duration: 0.7,
       ease: "easeIn",
       onComplete: () => commit(direction),
     });
   };
+
+  // Raccourcis clavier : ← passe, → j'aime, Backspace = je ne sais pas (passer).
+  // (Pas d'undo dans le modèle produit : les notes sont commit côté serveur au
+  // swipe ; Backspace mappe donc l'action neutre la plus proche.)
+  const flyRef = useRef(fly);
+  flyRef.current = fly;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") flyRef.current("dislike");
+      else if (e.key === "ArrowRight") flyRef.current("like");
+      else if (e.key === "Backspace") {
+        e.preventDefault();
+        flyRef.current("neutral");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleDragEnd = (
     _e: MouseEvent | TouchEvent | PointerEvent,
@@ -111,8 +135,8 @@ export default function SwipeDeck({
   const stack = cards.slice(index, index + 3);
 
   return (
-    <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-3 md:max-w-xl md:gap-4">
-      <div className="relative h-[min(66vh,520px)] w-full md:h-[min(74vh,660px)]">
+    <div className="mx-auto flex w-full max-w-[440px] flex-col items-center gap-6">
+      <div className="relative h-[min(66vh,600px)] w-full">
         {stack
           .map((card, i) => ({ card, i }))
           .reverse() // les cartes du fond rendues en premier (z-index naturel)
@@ -125,7 +149,7 @@ export default function SwipeDeck({
                   key={card.slug}
                   className="absolute inset-0"
                   initial={false}
-                  animate={{ scale: 1 - i * 0.05, y: i * 16 }}
+                  animate={{ scale: 1 - i * 0.06, y: i * 16 }}
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                   style={{ zIndex: 10 - i }}
                 >
@@ -154,57 +178,74 @@ export default function SwipeDeck({
                 {/* Teinte plein-carte selon la direction du swipe */}
                 <motion.div
                   style={{ opacity: likeTint }}
-                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl bg-emerald-400"
+                  className="pointer-events-none absolute inset-0 z-10 rounded-[24px] bg-ok"
                 />
                 <motion.div
                   style={{ opacity: nopeTint }}
-                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl bg-rose-400"
+                  className="pointer-events-none absolute inset-0 z-10 rounded-[24px] bg-no"
                 />
 
-                {/* Tampons OUI / NON — gros, posés sur le corps blanc (pas le bandeau) */}
+                {/* Tampons J'aime / Passe — gros, en serif, posés sur le corps */}
                 <motion.div
                   style={{ opacity: likeOpacity }}
-                  className="pointer-events-none absolute left-6 top-20 z-30 -rotate-12 rounded-2xl border-[6px] border-emerald-500 bg-white/85 px-6 py-2 text-5xl font-black uppercase tracking-wider text-emerald-600 shadow-xl dark:bg-slate-900/85"
+                  className="pointer-events-none absolute right-5 top-20 z-30 rotate-[14deg] rounded-xl border-[3px] border-ok px-[18px] py-1.5 font-serif text-[34px] tracking-wide text-ok"
                 >
-                  Oui
+                  J&apos;aime
                 </motion.div>
                 <motion.div
                   style={{ opacity: nopeOpacity }}
-                  className="pointer-events-none absolute right-6 top-20 z-30 rotate-12 rounded-2xl border-[6px] border-rose-500 bg-white/85 px-6 py-2 text-5xl font-black uppercase tracking-wider text-rose-600 shadow-xl dark:bg-slate-900/85"
+                  className="pointer-events-none absolute left-5 top-20 z-30 -rotate-[14deg] rounded-xl border-[3px] border-no px-[18px] py-1.5 font-serif text-[34px] tracking-wide text-no"
                 >
-                  Non
+                  Passe
                 </motion.div>
               </motion.div>
             );
           })}
       </div>
 
-      {/* Boutons fallback — desktop + accessibilité (= mêmes actions que le drag) */}
-      <div className="flex items-center justify-center gap-5">
+      {/* Contrôles : Passe / Je ne sais pas / J'aime (= mêmes actions que le drag) */}
+      <div className="flex items-center justify-center gap-[22px]">
         <button
           type="button"
           onClick={() => fly("dislike")}
-          aria-label="Pas pour moi"
-          className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-rose-200 bg-white text-2xl shadow-sm transition hover:border-rose-400 hover:bg-rose-50 dark:border-rose-900 dark:bg-slate-800 dark:hover:bg-rose-950/40"
+          aria-label="Passer"
+          className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-no/35 bg-surface transition active:scale-90 hover:border-no hover:bg-no/10"
         >
-          👎
+          <ThumbsDown className="size-7 text-no" strokeWidth={2} />
         </button>
         <button
           type="button"
           onClick={() => fly("neutral")}
           aria-label="Je ne sais pas, passer"
-          className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-xl shadow-sm transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+          className="grid size-[50px] place-items-center rounded-full border-[1.5px] border-line-strong bg-surface transition active:scale-90 hover:border-ink-soft"
         >
-          ↩
+          <RotateCcw className="size-5 text-muted" strokeWidth={2} />
         </button>
         <button
           type="button"
           onClick={() => fly("like")}
           aria-label="Ça m'intéresse"
-          className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-200 bg-white text-2xl shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-900 dark:bg-slate-800 dark:hover:bg-emerald-950/40"
+          className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-ok/40 bg-surface transition active:scale-90 hover:border-ok hover:bg-ok/10"
         >
-          👍
+          <ThumbsUp className="size-7 text-ok" strokeWidth={2} />
         </button>
+      </div>
+
+      {/* Tally : j'aime / passés / progression */}
+      <div className="flex items-center justify-center gap-[18px] text-sm tabular-nums text-muted">
+        <span className="inline-flex items-center gap-2">
+          <ThumbsUp className="size-4 text-ok" strokeWidth={1.9} />
+          <b className="font-semibold text-ink">{likes}</b> j&apos;aime
+        </span>
+        <span className="size-1 rounded-full bg-line-strong" />
+        <span className="inline-flex items-center gap-2">
+          <ThumbsDown className="size-4 text-no" strokeWidth={1.9} />
+          <b className="font-semibold text-ink">{passes}</b> passés
+        </span>
+        <span className="size-1 rounded-full bg-line-strong" />
+        <span>
+          {Math.min(index, cards.length)}/{cards.length}
+        </span>
       </div>
     </div>
   );

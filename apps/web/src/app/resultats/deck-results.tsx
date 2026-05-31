@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
+import ThemeToggle from "@/components/theme-toggle";
 import {
   isUnlocked,
   loadSession,
@@ -405,14 +407,15 @@ export default function DeckResults() {
   if (!session) {
     return (
       <div className="mx-auto max-w-xl px-6 py-20 text-center">
-        <p className="text-lg text-slate-600 dark:text-slate-300">
+        <p className="text-lg text-ink-soft">
           Aucun résultat en session. Lance d&apos;abord le questionnaire.
         </p>
         <Link
           href="/questionnaire"
-          className="mt-6 inline-block rounded-full bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-500"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 font-semibold text-paper transition hover:bg-accent hover:text-white"
         >
           Questionnaire
+          <ArrowRight className="size-4" />
         </Link>
       </div>
     );
@@ -420,20 +423,24 @@ export default function DeckResults() {
 
   // ── Rendu principal ────────────────────────────────────────────
   return (
-    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col px-5 py-8 md:max-w-2xl">
-      <div className="mb-3 flex items-center justify-between">
-        <Link
-          href="/"
-          className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-        >
-          ← Accueil
-        </Link>
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-[600px] flex-col px-5 pb-10 pt-6">
+      <div className="flex items-center justify-between gap-4">
         <Link
           href="/questionnaire"
-          className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+          className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-75"
         >
-          Refaire le questionnaire
+          <ArrowLeft className="size-4" /> Refaire le test
         </Link>
+        <ThemeToggle />
+      </div>
+
+      <div className="mt-6 text-center">
+        <h1 className="font-serif text-[clamp(30px,5vw,40px)] leading-tight tracking-tight">
+          Tes pistes métiers
+        </h1>
+        <p className="mt-2 text-[15.5px] text-muted">
+          Glisse à droite si ça t&apos;intéresse, à gauche sinon.
+        </p>
       </div>
 
       {session.portrait && <CompactPortrait portrait={session.portrait} />}
@@ -442,7 +449,7 @@ export default function DeckResults() {
         <AlertBanner message={verifyMsg} variant="error" className="mt-3" />
       )}
 
-      <div className="mt-4 flex-1">
+      <div className="mt-5 flex-1">
         {screen.kind === "deck" && roundCards.length > 0 && (
           <SwipeDeck
             key={roundIndex}
@@ -467,7 +474,7 @@ export default function DeckResults() {
 
         {screen.kind === "fetching" && (
           <CenterMsg>
-            <p className="animate-pulse text-sm text-slate-500">
+            <p className="animate-pulse text-sm text-muted">
               L&apos;IA affine ton prochain paquet de métiers…
             </p>
           </CenterMsg>
@@ -497,38 +504,36 @@ function CenterMsg({ children }: { children: React.ReactNode }) {
 function CompactPortrait({ portrait }: { portrait: StoredPortrait }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <section className="mt-3 rounded-2xl border border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/20">
+    <section className="mt-5 rounded-2xl border border-line bg-surface">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={expanded}
       >
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-400">
-            ✨ Ton portrait
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-accent-ink">
+            <Sparkles className="size-3" strokeWidth={1.8} /> Ton portrait
           </p>
-          <p className="mt-0.5 truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+          <p className="mt-0.5 truncate text-sm font-semibold text-ink">
             {portrait.archetype}
           </p>
         </div>
-        <span
-          className={`shrink-0 text-xs text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+        <ChevronDown
+          className={`size-4 shrink-0 text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
           aria-hidden="true"
-        >
-          ▼
-        </span>
+        />
       </button>
       {expanded && (
-        <div className="border-t border-indigo-200 px-4 pb-3 pt-2.5 dark:border-indigo-900">
-          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+        <div className="border-t border-line px-4 pb-3 pt-2.5">
+          <p className="text-sm leading-relaxed text-ink-soft">
             {portrait.summary}
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {portrait.strengths.map((force, i) => (
               <span
                 key={i}
-                className="rounded-full border border-indigo-200 bg-white px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-200"
+                className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent-ink"
               >
                 {force}
               </span>
@@ -553,20 +558,32 @@ function PaywallScreen(props: {
   const likes = Object.values(ratings).filter((v) => v === "like").length;
   const dislikes = Object.values(ratings).filter((v) => v === "dislike").length;
   return (
-    <div className="mt-6 rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50/50 p-6 dark:border-indigo-900 dark:from-indigo-950/30 dark:to-purple-950/20">
-      <h2 className="text-xl font-semibold tracking-tight">
+    <div className="mt-6 rounded-3xl border border-line bg-surface p-7 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)]">
+      <h2 className="font-serif text-2xl tracking-tight text-ink">
         Tu as exploré tes 3 premières pistes
       </h2>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-        👍 {likes} · 👎 {dislikes}
+      <p className="mt-2 flex items-center gap-4 text-sm text-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <ThumbsUp className="size-4 text-ok" strokeWidth={1.9} /> {likes}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <ThumbsDown className="size-4 text-no" strokeWidth={1.9} /> {dislikes}
+        </span>
       </p>
-      <p className="mt-5 text-sm font-medium text-slate-700 dark:text-slate-200">
+      <p className="mt-5 text-sm font-medium text-ink">
         Débloque la suite :
       </p>
-      <ul className="mt-2 flex flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-        <li>✦ De nouveaux métiers affinés à chaque paquet par l&apos;IA</li>
-        <li>✦ Explications personnalisées sur chaque carte</li>
-        <li>✦ Plan d&apos;action concret sur chaque fiche</li>
+      <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
+        {[
+          "De nouveaux métiers affinés à chaque paquet par l'IA",
+          "Explications personnalisées sur chaque carte",
+          "Plan d'action concret sur chaque fiche",
+        ].map((f) => (
+          <li key={f} className="flex gap-2.5">
+            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+            {f}
+          </li>
+        ))}
       </ul>
       {props.needsEmailForPayment ? (
         <div className="mt-4">
@@ -581,13 +598,14 @@ function PaywallScreen(props: {
           type="button"
           disabled={props.checkoutLoading || !props.stripeOn}
           onClick={props.onCheckout}
-          className="mt-5 rounded-full bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow hover:bg-indigo-500 disabled:opacity-60"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
         >
           {props.checkoutLoading
             ? "Redirection…"
             : props.stripeOn
               ? "Débloquer · 15€"
               : "Paiement non configuré"}
+          {props.stripeOn && !props.checkoutLoading && <ArrowRight className="size-4" />}
         </button>
       )}
     </div>
@@ -597,10 +615,10 @@ function PaywallScreen(props: {
 function InterBatch({ insight }: { insight: string }) {
   return (
     <div className="flex h-60 flex-col items-center justify-center gap-3 px-4 text-center">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-400">
-        ✨ Nouveau paquet affiné
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
+        <Sparkles className="size-3.5" strokeWidth={1.8} /> Nouveau paquet affiné
       </p>
-      <p className="max-w-md text-base leading-relaxed text-slate-700 dark:text-slate-200">
+      <p className="max-w-md text-base leading-relaxed text-ink-soft">
         {insight}
       </p>
     </div>
@@ -620,26 +638,29 @@ function ExhaustedScreen({ session }: { session: StoredSession }) {
   ];
   const likedCards = allCards.filter((c) => likedSlugs.has(c.job.slug));
   return (
-    <div className="mt-6">
-      <h2 className="text-xl font-semibold tracking-tight">
+    <div className="mt-6 text-center">
+      <div className="mx-auto grid size-[88px] place-items-center rounded-full bg-accent-soft">
+        <Check className="size-10 text-accent" strokeWidth={2.2} />
+      </div>
+      <h2 className="mt-6 font-serif text-[30px] leading-tight tracking-tight">
         Tu as fait le tour des pistes
       </h2>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <p className="mx-auto mt-3 max-w-[32ch] text-[15.5px] text-ink-soft">
         On a exploré ensemble tous les métiers qu&apos;on a trouvés pour toi.
       </p>
       {likedCards.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+        <div className="mt-8 text-left">
+          <p className="mb-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-accent-ink">
             Tes coups de cœur
           </p>
-          <ul className="flex flex-col gap-1.5">
+          <ul className="flex flex-col gap-2.5">
             {likedCards.map((c) => (
               <li key={c.job.slug}>
                 <Link
                   href={`/metiers/${c.job.slug}?sessionId=${session.sessionId}`}
-                  className="text-sm text-slate-700 underline-offset-2 hover:underline dark:text-slate-200"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-ink underline-offset-2 hover:text-accent-ink hover:underline"
                 >
-                  → {c.job.title}
+                  <ArrowRight className="size-4 text-accent" /> {c.job.title}
                 </Link>
               </li>
             ))}

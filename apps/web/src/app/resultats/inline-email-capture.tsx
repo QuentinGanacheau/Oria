@@ -64,11 +64,11 @@ export default function InlineEmailCapture({
   };
 
   return (
-    <div className="rounded-xl border border-indigo-200 bg-white p-5 dark:border-indigo-800 dark:bg-slate-900">
-      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+    <div className="rounded-2xl border border-line bg-surface p-5">
+      <p className="text-sm font-medium text-ink">
         Un email est requis pour accéder au rapport complet
       </p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-xs text-muted">
         Il sert à t&apos;envoyer la confirmation et te permettre de retrouver
         tes résultats plus tard.
       </p>
@@ -83,25 +83,25 @@ export default function InlineEmailCapture({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
-          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-indigo-500 dark:focus:bg-slate-900"
+          className="w-full rounded-2xl border-[1.5px] border-line bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
         />
 
-        <label className="flex items-start gap-2.5 cursor-pointer">
+        <label className="flex cursor-pointer items-start gap-2.5">
           <input
             type="checkbox"
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
             disabled={loading}
-            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-200"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-line-strong accent-accent"
           />
-          <span className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+          <span className="text-xs leading-relaxed text-ink-soft">
             J&apos;accepte de recevoir la confirmation de paiement et mes
             résultats par email.
           </span>
         </label>
 
         {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <p className="rounded-2xl border border-no/40 bg-no/10 px-3 py-2 text-xs text-no">
             {error}
           </p>
         )}
@@ -110,15 +110,15 @@ export default function InlineEmailCapture({
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
           >
-            {loading ? "Enregistrement…" : "Continuer vers le paiement →"}
+            {loading ? "Enregistrement…" : "Continuer vers le paiement"}
           </button>
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+            className="text-xs text-muted transition-colors hover:text-ink-soft disabled:opacity-50"
           >
             Annuler
           </button>

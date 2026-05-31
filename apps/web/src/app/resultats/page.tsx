@@ -12,10 +12,10 @@ const DECK_MODE = process.env.NEXT_PUBLIC_DECK_MODE === "true";
 
 export default function ResultatsPage() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-paper text-ink">
       <Suspense
         fallback={
-          <p className="px-6 py-20 text-center text-slate-500">Chargement des résultats…</p>
+          <p className="px-6 py-20 text-center text-muted">Chargement des résultats…</p>
         }
       >
         {DECK_MODE ? <DeckResults /> : <ResultatsClient />}

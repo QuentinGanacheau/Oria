@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Target } from "lucide-react";
 import { apiPost } from "@/lib/api";
 
 /**
@@ -78,14 +79,16 @@ export default function EmailGate({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="rounded-3xl border border-line bg-surface p-7 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)] sm:p-12">
       {/* Hero rassurant : on confirme que les résultats sont prêts */}
       <div className="text-center">
-        <p className="text-3xl">🎯</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight">
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-accent-soft">
+          <Target className="size-8 text-accent-ink" strokeWidth={1.7} />
+        </div>
+        <h1 className="mt-4 font-serif text-3xl tracking-tight">
           Tes {matchCount} pistes métiers sont prêtes
         </h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-300">
+        <p className="mt-2 text-ink-soft">
           Reçois-les par email pour y revenir tranquillement plus tard.
         </p>
       </div>
@@ -95,7 +98,7 @@ export default function EmailGate({
         <div>
           <label
             htmlFor="email"
-            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+            className="mb-1.5 block text-sm font-medium text-ink-soft"
           >
             Ton email
           </label>
@@ -109,26 +112,26 @@ export default function EmailGate({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-indigo-500 dark:focus:bg-slate-900 dark:focus:ring-indigo-950"
+            className="w-full rounded-2xl border-[1.5px] border-line bg-surface-2 px-[18px] py-3.5 text-base outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
           />
         </div>
 
         {/* Consentement RGPD — case décochée par défaut, formulation claire */}
-        <label className="flex items-start gap-3 cursor-pointer">
+        <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
             disabled={loading}
-            className="mt-0.5 h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-200 dark:border-slate-600 dark:bg-slate-800"
+            className="mt-0.5 size-4 cursor-pointer rounded border-line-strong accent-accent"
           />
-          <span className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <span className="text-sm leading-relaxed text-ink-soft">
             J&apos;accepte de recevoir mes résultats par email. Pas de spam,
             désabonnement en un clic.{" "}
             <Link
               href="/confidentialite"
               target="_blank"
-              className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400"
+              className="text-accent-ink underline-offset-2 hover:underline"
             >
               Politique de confidentialité
             </Link>
@@ -136,7 +139,7 @@ export default function EmailGate({
         </label>
 
         {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <p className="rounded-2xl border border-no/40 bg-no/10 px-4 py-3 text-sm text-no">
             {error}
           </p>
         )}
@@ -144,9 +147,10 @@ export default function EmailGate({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="rounded-full bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-indigo-600"
+          className="group inline-flex items-center justify-center gap-2 rounded-full bg-ink px-6 py-3.5 text-base font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
         >
-          {loading ? "Envoi en cours…" : "Voir mes résultats →"}
+          {loading ? "Envoi en cours…" : "Voir mes résultats"}
+          {!loading && <ArrowRight className="size-4 transition-transform group-enabled:group-hover:translate-x-0.5" />}
         </button>
       </form>
 
@@ -156,7 +160,7 @@ export default function EmailGate({
           type="button"
           onClick={() => onComplete(false)}
           disabled={loading}
-          className="text-xs text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-300"
+          className="text-xs text-muted underline-offset-2 transition-colors hover:text-ink-soft hover:underline disabled:opacity-50"
         >
           Continuer sans email
         </button>

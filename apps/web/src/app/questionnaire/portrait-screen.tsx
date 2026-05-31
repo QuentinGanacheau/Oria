@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertTriangle, ArrowRight, Sparkles, Zap } from "lucide-react";
 import type { StoredPortrait } from "@/lib/storage";
 
 /**
@@ -54,34 +55,34 @@ export default function PortraitScreen({ portrait, onComplete }: Props) {
     }`;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-10">
+    <div className="rounded-3xl border border-line bg-surface p-7 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)] sm:p-12">
       {/* Eyebrow + archétype */}
       <div className={reveal(1)}>
-        <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-400">
-          ✨ Ton portrait
+        <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
+          <Sparkles className="size-4" strokeWidth={1.7} /> Ton portrait
         </p>
-        <h1 className="mt-3 text-center text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
+        <h1 className="mt-3 text-center font-serif text-[clamp(30px,4vw,44px)] leading-tight tracking-tight">
           {portrait.archetype}
         </h1>
       </div>
 
       {/* Summary */}
       <p
-        className={`mt-6 text-center text-base leading-relaxed text-slate-700 dark:text-slate-200 sm:text-lg ${reveal(2)}`}
+        className={`mt-6 text-center text-base leading-relaxed text-ink-soft sm:text-lg ${reveal(2)}`}
       >
         {portrait.summary}
       </p>
 
       {/* Forces — chips */}
       <div className={`mt-8 ${reveal(3)}`}>
-        <p className="text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <p className="text-center text-xs font-semibold uppercase tracking-wider text-muted">
           Tes forces naturelles
         </p>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
+        <div className="mt-3 flex flex-wrap justify-center gap-2.5">
           {portrait.strengths.map((force, i) => (
             <span
               key={i}
-              className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200"
+              className="rounded-full bg-accent-soft px-4 py-2 text-sm font-medium text-accent-ink"
             >
               {force}
             </span>
@@ -91,19 +92,19 @@ export default function PortraitScreen({ portrait, onComplete }: Props) {
 
       {/* Thrives + Drains : deux cartes côte à côte */}
       <div className={`mt-8 grid gap-4 sm:grid-cols-2 ${reveal(4)}`}>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            ⚡ Ce qui te fait vibrer
+        <div className="rounded-2xl border border-accent/30 bg-accent-soft p-5">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-accent-ink">
+            <Zap className="size-4" strokeWidth={1.8} /> Ce qui te fait vibrer
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
             {portrait.thrives}
           </p>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 dark:border-amber-900 dark:bg-amber-950/30">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-            ⚠️ Ce qui te viderait
+        <div className="rounded-2xl border border-warn/35 bg-warn/10 p-5">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-warn">
+            <AlertTriangle className="size-4" strokeWidth={1.8} /> Ce qui te viderait
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
             {portrait.drains}
           </p>
         </div>
@@ -114,9 +115,10 @@ export default function PortraitScreen({ portrait, onComplete }: Props) {
         <button
           type="button"
           onClick={onComplete}
-          className="rounded-full bg-indigo-600 px-7 py-3.5 text-base font-medium text-white shadow-md transition hover:bg-indigo-500"
+          className="group inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-base font-semibold text-paper transition hover:bg-accent hover:text-white"
         >
-          Voir mes métiers compatibles →
+          Voir mes métiers compatibles
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
         </button>
       </div>
     </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, FlaskConical, RotateCcw } from "lucide-react";
 import SwipeDeck, { type SwipeDirection } from "../swipe-deck";
 import { MOCK_JOBS } from "./mock-jobs";
 import type { SwipeCardData } from "../swipe-card";
@@ -38,27 +39,27 @@ export default function PrototypePage() {
   const skipped = swiped.filter((s) => s.direction === "neutral");
 
   return (
-    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col px-5 py-8 md:max-w-2xl">
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-[600px] flex-col bg-paper px-5 py-8 text-ink">
       {/* En-tête prototype */}
       <div className="mb-2 flex items-center justify-between">
-        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-          🧪 Prototype
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-warn/15 px-3 py-1 text-xs font-semibold text-warn">
+          <FlaskConical className="size-3.5" strokeWidth={1.9} /> Prototype
         </span>
         <Link
           href="/resultats"
-          className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+          className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-accent-ink"
         >
-          ← Vue actuelle
+          <ArrowLeft className="size-3.5" /> Vue actuelle
         </Link>
       </div>
 
       {!done && (
         <>
-          <div className="mb-5 text-center">
-            <h1 className="text-xl font-semibold tracking-tight">
+          <div className="mb-6 text-center">
+            <h1 className="font-serif text-[clamp(30px,5vw,40px)] leading-tight tracking-tight">
               Tes pistes métiers
             </h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-[15.5px] text-muted">
               Glisse à droite si ça t&apos;intéresse, à gauche sinon.
             </p>
           </div>
@@ -70,43 +71,32 @@ export default function PrototypePage() {
             onEmpty={() => setDone(true)}
             onOpenSheet={(slug) => router.push(`/metiers/${slug}`)}
           />
-
-          {/* Tally live */}
-          <div className="mt-6 flex items-center justify-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-            <span>👍 {liked.length}</span>
-            <span>🤔 {skipped.length}</span>
-            <span>👎 {disliked.length}</span>
-            <span className="text-slate-300 dark:text-slate-600">·</span>
-            <span>
-              {swiped.length}/{MOCK_JOBS.length}
-            </span>
-          </div>
         </>
       )}
 
       {/* Écran récap (fin du deck) */}
       {done && (
         <div className="flex flex-1 flex-col">
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="font-serif text-[clamp(28px,4vw,40px)] leading-tight tracking-tight">
             Tu as exploré {swiped.length} pistes
           </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-2 text-sm text-muted">
             (Ici, dans la vraie version, on enchaînerait sur le paywall puis un
             nouveau batch affiné par l&apos;IA.)
           </p>
 
-          <RecapBlock title="Ça t'intéresse" color="emerald" items={liked} />
-          <RecapBlock title="Pas pour toi" color="rose" items={disliked} />
+          <RecapBlock title="Ça t'intéresse" color="ok" items={liked} />
+          <RecapBlock title="Pas pour toi" color="no" items={disliked} />
           {skipped.length > 0 && (
-            <RecapBlock title="À revoir" color="slate" items={skipped} />
+            <RecapBlock title="À revoir" color="muted" items={skipped} />
           )}
 
           <button
             type="button"
             onClick={restart}
-            className="mt-8 rounded-full bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow transition hover:bg-indigo-500"
+            className="mt-8 inline-flex items-center justify-center gap-2 self-start rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-accent hover:text-white"
           >
-            ↺ Recommencer
+            <RotateCcw className="size-4" /> Recommencer
           </button>
         </div>
       )}
@@ -120,28 +110,24 @@ function RecapBlock({
   items,
 }: {
   title: string;
-  color: "emerald" | "rose" | "slate";
+  color: "ok" | "no" | "muted";
   items: Swiped[];
 }) {
   if (items.length === 0) return null;
   const dot =
-    color === "emerald"
-      ? "bg-emerald-500"
-      : color === "rose"
-        ? "bg-rose-500"
-        : "bg-slate-400";
+    color === "ok" ? "bg-ok" : color === "no" ? "bg-no" : "bg-line-strong";
   return (
     <div className="mt-6">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent-ink">
         {title} ({items.length})
       </p>
       <ul className="flex flex-col gap-1.5">
         {items.map((s) => (
           <li
             key={s.card.slug}
-            className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
+            className="flex items-center gap-2.5 text-sm text-ink-soft"
           >
-            <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
+            <span className={`size-2 shrink-0 rounded-full ${dot}`} />
             {s.card.title}
           </li>
         ))}

@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, ArrowRight, Check, Clock, X } from "lucide-react";
 import { apiPost } from "@/lib/api";
 import { saveSession, type StoredPortrait } from "@/lib/storage";
+import ThemeToggle from "@/components/theme-toggle";
 import EmailGate from "./email-gate";
 import PortraitScreen from "./portrait-screen";
 
@@ -69,6 +72,9 @@ export default function QuestionnairePage() {
   const [draft, setDraft] = useState("");
   // Map optionId → label pour les chips sélectionnés (SUGGESTIONS_WITH_TEXT)
   const [selectedSuggestions, setSelectedSuggestions] = useState<Map<string, string>>(new Map());
+  // Choix en attente d'auto-avance (SINGLE_CHOICE) — donne le feedback visuel
+  // de sélection ~260 ms avant de charger la question suivante.
+  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   /**
    * Stocke les matches en attente d'affichage de l'écran EmailGate.
@@ -99,6 +105,7 @@ export default function QuestionnairePage() {
     }
     setDraft("");
     setSelectedSuggestions(new Map());
+    setPendingChoice(null);
   }, [question]);
 
   const fetchNext = useCallback(
@@ -293,12 +300,18 @@ export default function QuestionnairePage() {
 
   const onChoose = (optionId: string, optionLabel: string) => {
     const currentQuestion = currentQuestionRef.current;
-    if (!currentQuestion || !sessionId || loading) return;
-    void fetchNext(
-      { sessionId, questionKey: currentQuestion.id, optionKey: optionId },
-      optionLabel,
-      { draft: "", suggestions: new Map() },
-    );
+    if (!currentQuestion || !sessionId || loading || pendingChoice) return;
+    // Feedback visuel immédiat puis auto-avance ~260 ms plus tard.
+    setPendingChoice(optionId);
+    const sid = sessionId;
+    const key = currentQuestion.id;
+    setTimeout(() => {
+      void fetchNext(
+        { sessionId: sid, questionKey: key, optionKey: optionId },
+        optionLabel,
+        { draft: "", suggestions: new Map() },
+      );
+    }, 260);
   };
 
   const onSubmitFreeText = () => {
@@ -352,198 +365,254 @@ export default function QuestionnairePage() {
   const currentNum = answered + 1;
   const progressPct = total !== null ? Math.round((answered / total) * 100) : null;
 
+  const showChrome = (question || complete) && !pendingMatch;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
-        {/* ── Navigation + compteur ────────────────────────────────────── */}
-        <div className="flex items-center justify-between text-sm">
-          <Link href="/" className="text-indigo-600 hover:underline dark:text-indigo-400">
-            ← Accueil
-          </Link>
-          {(question || complete) && (
-            <span className="tabular-nums text-slate-500 dark:text-slate-400">
-              {complete
-                ? "Terminé ✓"
-                : total !== null
-                  ? `${currentNum} / ${total}`
-                  : `Question ${currentNum}`}
-            </span>
-          )}
+    <div className="flex min-h-screen flex-col bg-paper text-ink">
+      {/* ── Topbar : accueil · thème · compteur ──────────────────────────── */}
+      <div className="sticky top-0 z-30 bg-paper/85 backdrop-blur-md">
+        <div className="mx-auto max-w-[760px] px-6 pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-[15px] font-medium text-accent-ink transition-opacity hover:opacity-75"
+            >
+              <ArrowLeft className="size-4" /> Accueil
+            </Link>
+            <div className="flex items-center gap-3.5">
+              <ThemeToggle />
+              {showChrome && (
+                <span className="text-sm tabular-nums text-muted">
+                  {complete ? (
+                    "Terminé"
+                  ) : total !== null ? (
+                    <>
+                      <b className="font-semibold text-ink">{currentNum}</b> / {total}
+                    </>
+                  ) : (
+                    <>
+                      Question <b className="font-semibold text-ink">{currentNum}</b>
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* ── Barre de progression ─────────────────────────────────────── */}
-        {(question || complete) && (
-          <div className="space-y-1.5">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+        {/* Barre de progression */}
+        {showChrome && (
+          <div className="mx-auto mt-4 max-w-[760px] px-6">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
               <div
-                className="h-full rounded-full bg-indigo-500 transition-all duration-500 ease-out"
+                className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
                 style={{ width: `${complete ? 100 : (progressPct ?? 0)}%` }}
               />
             </div>
-            {!complete && progressPct !== null && (
-              <p className="text-right text-xs text-slate-400 dark:text-slate-500">
-                {progressPct}% complété
-              </p>
-            )}
+            <div className="mt-2 flex justify-end text-[13px] text-muted">
+              {complete ? "Terminé" : progressPct !== null ? `${progressPct}% complété` : ""}
+            </div>
           </div>
         )}
+      </div>
 
-        {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-            {error}
-          </p>
+      {/* Lien Précédent */}
+      <div className="mx-auto mt-4 min-h-6 w-full max-w-[760px] px-6">
+        {question && !complete && history.length > 0 && !pendingMatch && !aiError && (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void goBack()}
+            className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-accent-ink disabled:opacity-40"
+          >
+            <ArrowLeft className="size-4" /> Précédent
+          </button>
         )}
+      </div>
 
-        {loading && !question && !complete && !aiError && (
-          <p className="text-center text-slate-500">Chargement du questionnaire…</p>
-        )}
-
-        {/* Erreur IA : calcul des résultats impossible — propose de réessayer */}
-        {aiError && !loading && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center dark:border-amber-900 dark:bg-amber-950/30">
-            <p className="text-2xl">⏳</p>
-            <h2 className="mt-3 text-lg font-semibold text-amber-900 dark:text-amber-100">
-              Notre moteur est momentanément surchargé
-            </h2>
-            <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
-              Tes réponses sont bien enregistrées. Le calcul de tes résultats
-              nécessite notre IA, qui est temporairement indisponible. Réessaie
-              dans quelques minutes — pas besoin de refaire le questionnaire.
+      {/* ── Scène ────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 items-start justify-center px-6 pb-20 pt-5">
+        <div className="w-full max-w-[760px]">
+          {error && (
+            <p className="mb-5 rounded-2xl border border-no/40 bg-no/10 px-4 py-3 text-sm text-no">
+              {error}
             </p>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void retryMatch()}
-              className="mt-5 rounded-full bg-amber-600 px-6 py-3 text-sm font-medium text-white shadow hover:bg-amber-500 disabled:opacity-60"
-            >
-              {loading ? "Calcul en cours…" : "Réessayer →"}
-            </button>
-          </div>
-        )}
-
-        {/* Post-flow : EmailGate puis PortraitScreen, dans l'ordre. */}
-        {pendingMatch && !aiError && postFlowStep === "email" && (
-          <EmailGate
-            sessionId={pendingMatch.sessionId}
-            matchCount={pendingMatch.matches.length}
-            onComplete={onEmailComplete}
-          />
-        )}
-
-        {pendingMatch && !aiError && postFlowStep === "portrait" && (
-          <PortraitScreen
-            portrait={pendingMatch.portrait}
-            onComplete={onPortraitComplete}
-          />
-        )}
-
-        {question && !complete && (
-          <>
-          {history.length > 0 && !pendingMatch && !aiError && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void goBack()}
-              className="w-fit text-sm text-slate-500 hover:text-slate-700 disabled:opacity-40 dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              ← Précédent
-            </button>
           )}
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h1 className="text-xl font-semibold leading-snug">{question.text}</h1>
-            {question.helperText && (
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                {question.helperText}
+
+          {loading && !question && !complete && !aiError && (
+            <p className="text-center text-muted">Chargement du questionnaire…</p>
+          )}
+
+          {/* Erreur IA : calcul des résultats impossible — propose de réessayer */}
+          {aiError && !loading && (
+            <div className="rounded-3xl border border-warn/40 bg-warn/10 p-8 text-center">
+              <div className="mx-auto grid size-16 place-items-center rounded-full bg-warn/15">
+                <Clock className="size-8 text-warn" strokeWidth={1.8} />
+              </div>
+              <h2 className="mt-4 font-serif text-2xl text-ink">
+                Notre moteur est momentanément surchargé
+              </h2>
+              <p className="mt-2 text-sm text-ink-soft">
+                Tes réponses sont bien enregistrées. Le calcul de tes résultats
+                nécessite notre IA, qui est temporairement indisponible. Réessaie
+                dans quelques minutes — pas besoin de refaire le questionnaire.
               </p>
-            )}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void retryMatch()}
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-paper transition hover:bg-accent hover:text-white disabled:opacity-60"
+              >
+                {loading ? "Calcul en cours…" : "Réessayer"}
+                <ArrowRight className="size-4" />
+              </button>
+            </div>
+          )}
 
-            {question.type === "SUGGESTIONS_WITH_TEXT" ? (
-              <div className="mt-6 flex flex-col gap-4">
-                <div className="flex flex-wrap gap-2">
-                  {question.options.map((opt) => {
-                    const selected = selectedSuggestions.has(opt.id);
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
+          {/* Post-flow : EmailGate puis PortraitScreen, dans l'ordre. */}
+          {pendingMatch && !aiError && postFlowStep === "email" && (
+            <EmailGate
+              sessionId={pendingMatch.sessionId}
+              matchCount={pendingMatch.matches.length}
+              onComplete={onEmailComplete}
+            />
+          )}
+
+          {pendingMatch && !aiError && postFlowStep === "portrait" && (
+            <PortraitScreen
+              portrait={pendingMatch.portrait}
+              onComplete={onPortraitComplete}
+            />
+          )}
+
+          {question && !complete && !pendingMatch && !aiError && (
+            <div className="rounded-3xl border border-line bg-surface p-7 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)] sm:p-12">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={question.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.35, ease: "easeOut" }}
+                >
+                  <h1 className="font-serif text-[clamp(26px,3.4vw,38px)] leading-[1.06] tracking-tight">
+                    {question.text}
+                  </h1>
+                  {question.helperText && (
+                    <p className="mt-3 max-w-[44ch] text-base text-muted">
+                      {question.helperText}
+                    </p>
+                  )}
+
+                  {question.type === "SUGGESTIONS_WITH_TEXT" ? (
+                    <div className="mt-7 flex flex-col gap-5">
+                      <div className="flex flex-wrap gap-2.5">
+                        {question.options.map((opt) => {
+                          const selected = selectedSuggestions.has(opt.id);
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => toggleSuggestion(opt.id, opt.label)}
+                              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-[15px] transition disabled:opacity-50 ${
+                                selected
+                                  ? "border-accent bg-accent text-white"
+                                  : "border-line-strong bg-surface text-ink-soft hover:border-accent hover:text-accent-ink"
+                              }`}
+                            >
+                              {opt.label}
+                              {selected && <X className="size-[15px]" strokeWidth={2.2} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder={question.placeholder ?? "Précise si tu veux…"}
+                        rows={4}
+                        maxLength={2000}
                         disabled={loading}
-                        onClick={() => toggleSuggestion(opt.id, opt.label)}
-                        className={`rounded-full border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
-                          selected
-                            ? "border-indigo-400 bg-indigo-100 text-indigo-700 dark:border-indigo-500 dark:bg-indigo-900/40 dark:text-indigo-300"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-700"
-                        }`}
-                      >
-                        {selected ? "✓ " : ""}{opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={question.placeholder ?? "Précise si tu veux…"}
-                  rows={3}
-                  maxLength={2000}
-                  disabled={loading}
-                  className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none transition focus:border-indigo-400 focus:bg-white disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-indigo-500 dark:focus:bg-slate-900"
-                />
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    disabled={loading || (selectedSuggestions.size === 0 && draft.trim().length === 0)}
-                    onClick={onSubmitSuggestions}
-                    className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Continuer
-                  </button>
-                </div>
-              </div>
-            ) : question.type === "FREE_TEXT" ? (
-              <div className="mt-6 flex flex-col gap-3">
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={question.placeholder ?? "Ta réponse…"}
-                  rows={6}
-                  maxLength={2000}
-                  disabled={loading}
-                  className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base leading-relaxed outline-none transition focus:border-indigo-400 focus:bg-white disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-indigo-500 dark:focus:bg-slate-900"
-                />
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>{draft.length} / 2000</span>
-                  <button
-                    type="button"
-                    disabled={loading || draft.trim().length < 3}
-                    onClick={onSubmitFreeText}
-                    className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Continuer
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-8 flex flex-col gap-3">
-                {question.options.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => onChoose(opt.id, opt.label)}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-left text-base font-medium transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/40"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          </>
-        )}
+                        className="w-full resize-y rounded-2xl border-[1.5px] border-line bg-surface-2 px-[18px] py-4 text-base leading-relaxed outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
+                      />
+                      <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          disabled={loading || (selectedSuggestions.size === 0 && draft.trim().length === 0)}
+                          onClick={onSubmitSuggestions}
+                          className="group inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-[15px] font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
+                        >
+                          Continuer
+                          <ArrowRight className="size-4 transition-transform group-enabled:group-hover:translate-x-0.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : question.type === "FREE_TEXT" ? (
+                    <div className="mt-7 flex flex-col gap-3">
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder={question.placeholder ?? "Ta réponse…"}
+                        rows={6}
+                        maxLength={2000}
+                        disabled={loading}
+                        className="w-full resize-y rounded-2xl border-[1.5px] border-line bg-surface-2 px-[18px] py-4 text-base leading-relaxed outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
+                      />
+                      <div className="flex items-center justify-between text-[13px] text-muted">
+                        <span className="tabular-nums">{draft.length} / 2000</span>
+                        <button
+                          type="button"
+                          disabled={loading || draft.trim().length < 3}
+                          onClick={onSubmitFreeText}
+                          className="group inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-[15px] font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
+                        >
+                          Continuer
+                          <ArrowRight className="size-4 transition-transform group-enabled:group-hover:translate-x-0.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-8 flex flex-col gap-3">
+                      {question.options.map((opt) => {
+                        const selected = pendingChoice === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={loading || pendingChoice !== null}
+                            onClick={() => onChoose(opt.id, opt.label)}
+                            className={`flex w-full items-center gap-4 rounded-2xl border-[1.5px] px-[22px] py-5 text-left text-[16.5px] transition active:scale-[.992] disabled:cursor-default ${
+                              selected
+                                ? "border-accent bg-accent-soft"
+                                : "border-line bg-surface-2 hover:border-accent/45 hover:bg-surface"
+                            } ${loading && !selected ? "opacity-50" : ""}`}
+                          >
+                            <span
+                              className={`grid size-6 flex-none place-items-center rounded-full border-2 transition ${
+                                selected ? "border-accent bg-accent" : "border-line-strong"
+                              }`}
+                            >
+                              <Check
+                                className={`size-[13px] text-white transition ${selected ? "opacity-100" : "opacity-0"}`}
+                                strokeWidth={2.6}
+                              />
+                            </span>
+                            <span className="flex-1">{opt.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
 
-        {loading && question && (
-          <p className="text-center text-sm text-slate-500">Enregistrement…</p>
-        )}
+          {loading && question && !pendingMatch && (
+            <p className="mt-4 text-center text-sm text-muted">Enregistrement…</p>
+          )}
+        </div>
       </div>
     </div>
   );

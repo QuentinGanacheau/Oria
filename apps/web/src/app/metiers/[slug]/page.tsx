@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, Building2, Coins } from "lucide-react";
+import ThemeToggle from "@/components/theme-toggle";
 import JobPageTabs from "./job-page-tabs";
+import ScoreRing from "./score-ring";
+import SaveButton from "./save-button";
 
 export const dynamic = "force-dynamic";
 
@@ -31,25 +35,58 @@ export default async function MetierPage({ params }: { params: Promise<{ slug: s
   const job = await fetchJob(slug);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <article className="mx-auto max-w-3xl px-6 py-12">
-        <Link
-          href="/resultats"
-          className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
-        >
-          ← Retour aux résultats
-        </Link>
+    <div className="min-h-screen bg-paper text-ink">
+      {/* ── Topbar ───────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
+          <Link
+            href="/resultats"
+            className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-75"
+          >
+            <ArrowLeft className="size-4" /> Retour aux résultats
+          </Link>
+          <div className="flex items-center gap-3.5">
+            <SaveButton slug={job.slug} />
+            <ThemeToggle />
+          </div>
+        </div>
+      </div>
 
-        <header className="mt-8">
-          <p className="text-sm font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-            Fiche métier
-          </p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">{job.title}</h1>
-          <p className="mt-4 text-xl text-slate-600 dark:text-slate-300">{job.tagline}</p>
-        </header>
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <header className="border-b border-line">
+        <div className="mx-auto grid max-w-[920px] grid-cols-1 items-center gap-8 px-6 py-12 sm:grid-cols-[1fr_auto]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
+              Fiche métier
+            </p>
+            <h1 className="mt-3.5 font-serif text-[clamp(34px,5.2vw,56px)] leading-[1.05] tracking-tight">
+              {job.title}
+            </h1>
+            {job.tagline && (
+              <p className="mt-2.5 text-lg text-ink-soft">{job.tagline}</p>
+            )}
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              {job.salaryRangeHint && (
+                <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[13.5px] text-ink-soft">
+                  <Coins className="size-[15px] flex-none text-accent-ink" strokeWidth={1.8} />
+                  {job.salaryRangeHint}
+                </span>
+              )}
+              {job.workContext && (
+                <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[13.5px] text-ink-soft">
+                  <Building2 className="size-[15px] flex-none text-accent-ink" strokeWidth={1.8} />
+                  {job.workContext}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="-order-1 sm:order-none">
+            <ScoreRing slug={job.slug} />
+          </div>
+        </div>
+      </header>
 
-        <JobPageTabs job={job} />
-      </article>
+      <JobPageTabs job={job} />
     </div>
   );
 }

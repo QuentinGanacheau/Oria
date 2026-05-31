@@ -117,8 +117,8 @@ test.describe('Questionnaire — erreurs réseau', () => {
     );
     await page.goto('/questionnaire');
 
-    // Le composant affiche le message brut de l'erreur réseau dans un bloc rouge
-    await expect(page.locator('.border-red-200')).toBeVisible({ timeout: 5_000 });
+    // Le composant affiche le message brut de l'erreur réseau dans le bloc d'alerte
+    await expect(page.getByText('Service indisponible')).toBeVisible({ timeout: 5_000 });
   });
 
   test('affiche le panneau retry si /match échoue (IA indisponible)', async ({ page }) => {
