@@ -44,4 +44,9 @@ export type MatchingOptions = {
   topDomainsCount?: number;
   /** Nombre de métiers retournés au final. */
   finalTopN?: number;
+  /**
+   * Contexte utilisateur pour adapter les prompts IA.
+   * Optionnel — si absent, le track 'professional' est utilisé par défaut.
+   */
+  userContext?: import('../ai/user-context').UserContext;
 };

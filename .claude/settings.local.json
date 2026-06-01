@@ -4,7 +4,30 @@
       "Bash(npx prisma *)",
       "Bash(cat vitest.config.ts)",
       "Bash(cat vitest.config.js)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"E:\\\\Work\\\\FindYourJob\\\\apps\\\\api\\\\src\" -Filter \"*.spec.ts\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Read(//c/Users/slaye/.claude//**)",
+      "Read(//c/Users/slaye/.claude/**)",
+      "Bash(node -e \"const v = require\\('vitest/package.json'\\); console.log\\(v.version\\)\")",
+      "Bash(npm install *)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"const l=require\\('lucide-react'\\); console.log\\('Target' in l, 'Brain' in l, 'Check' in l, 'ClipboardCheck' in l, 'BarChart3' in l, 'Feather' in l, 'Lock' in l, 'ArrowRight' in l, 'ChevronDown' in l, 'PenLine' in l, 'BarChart' in l\\)\")",
+      "Bash(curl -s -o /tmp/fyj-home.html -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(grep -o \"qui te correspondent\\\\|font-serif\\\\|--font-serif\\\\|Ton classement\\\\|bg-paper\\\\|data-mode\\\\|lucide\" /tmp/fyj-home.html | sort | uniq -c; echo \"--- any error overlay? ---\"; grep -o \"Unhandled\\\\|error\\\\|Error:\" /tmp/fyj-home.html | sort | uniq -c | head)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/q.html -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/questionnaire)",
+      "Bash(npx playwright *)",
+      "Bash(curl -s -o /dev/null -w \"API status: %{http_code}\\\\n\" http://localhost:4000/v1/jobs/health)",
+      "Bash(curl -s \"http://localhost:4000/v1/questionnaire/start\" -X POST -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(node -e 'const {PrismaClient}=require\\('\\\\''@prisma/client'\\\\''\\);const p=new PrismaClient\\(\\);p.romeJob.findFirst\\({select:{slug:true,libelle:true}}\\).then\\(j=>{console.log\\(JSON.stringify\\(j\\)\\);return p.$disconnect\\(\\);}\\).catch\\(e=>{console.error\\(e.message\\);process.exit\\(1\\)}\\)')",
+      "Bash(node -e 'const {PrismaClient}=require\\('\\\\''@prisma/client'\\\\''\\);const p=new PrismaClient\\(\\);p.romeJob.findFirst\\(\\).then\\(j=>{console.log\\(JSON.stringify\\(Object.keys\\(j||{}\\)\\)\\);console.log\\('\\\\''code='\\\\'',j&&j.code,'\\\\''libelle='\\\\'',j&&j.libelle\\);return p.$disconnect\\(\\);}\\).catch\\(e=>{console.error\\(e.message\\);process.exit\\(1\\)}\\)')",
+      "Bash(curl -s -o /tmp/f1.html -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/metiers/I1620\")",
+      "Bash(curl -s -o /tmp/f2.html -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/metiers/I1620?sessionId=test&rank=1\")",
+      "Bash(curl -s -o /tmp/p.html -w '%{http_code}' http://localhost:3000/__TRACKED_VAR__)",
+      "Bash(curl -s -o /dev/null -w \"home HTTP %{http_code}\\\\n\" http://localhost:3000/)"
     ]
   }
 }

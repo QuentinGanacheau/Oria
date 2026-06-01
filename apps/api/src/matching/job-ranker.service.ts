@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
+import type { UserContext } from '../ai/user-context';
 import type { JobCandidate, MatchedJob, MatchingAnswer } from './matching.types';
 
 /**
@@ -29,6 +30,7 @@ export class JobRankerService {
   async rank(
     candidates: JobCandidate[],
     answers: MatchingAnswer[],
+    userContext?: UserContext,
   ): Promise<MatchedJob[] | null> {
     if (candidates.length === 0) return [];
 
@@ -41,6 +43,7 @@ export class JobRankerService {
         question: a.question,
         answer: a.answer,
       })),
+      userContext,
     });
 
     if (!aiScores) {

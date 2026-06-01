@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AnswerNextDto } from './dto/answer-next.dto';
 import { FinishSessionDto } from './dto/finish-session.dto';
+import { GoBackDto } from './dto/go-back.dto';
+import { RateJobDto } from './dto/rate-job.dto';
 import { RestoreSessionDto } from './dto/restore-session.dto';
 import { StartSessionDto } from './dto/start-session.dto';
 import { QuestionnaireService } from './questionnaire.service';
@@ -22,6 +24,66 @@ export class QuestionnaireController {
   @Post('next')
   next(@Body() body: AnswerNextDto) {
     return this.questionnaire.answerAndGetNext(body);
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/rate
+   *
+   * Enregistre la note d'un utilisateur sur un métier (👍/👎/🤔).
+   * Idempotent — on peut changer d'avis, la note est mise à jour.
+   * Accessible sans paiement (noter = porte d'entrée vers la passe 2 payante).
+   */
+  /**
+   * POST /v1/questionnaire/:sessionId/back
+   *
+   * Supprime la réponse à `questionKey` et toutes les réponses ultérieures,
+   * permettant à l'utilisateur de revenir en arrière dans le questionnaire.
+   * La session doit être ACTIVE.
+   */
+  @Post(':sessionId/back')
+  back(@Param('sessionId') sessionId: string, @Body() body: GoBackDto) {
+    return this.questionnaire.goBackToQuestion(sessionId, body.questionKey);
+  }
+
+  @Post(':sessionId/rate')
+  async rate(
+    @Param('sessionId') sessionId: string,
+    @Body() body: RateJobDto,
+  ) {
+    await this.questionnaire.rateJob(
+      sessionId,
+      body.jobSlug,
+      body.rating,
+      body.reason,
+    );
+    return { ok: true };
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/refine
+   *
+   * Génère la 2e passe de résultats affinés par les notes.
+   * Protégé : session.isPaid doit être true → 400 sinon.
+   * Idempotent via cache DB : si déjà généré, retourne le cache.
+   */
+  @Post(':sessionId/refine')
+  refine(@Param('sessionId') sessionId: string) {
+    return this.questionnaire.refineResults(sessionId);
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/next-batch
+   *
+   * Génère le prochain batch de métiers affinés (swipe deck — batches
+   * progressifs). Chaque appel produit un batch excluant les métiers déjà vus.
+   * Protégé (session payée) + plafonné (MAX_REFINED_BATCHES, MIN_NEW_RATINGS).
+   *
+   * Retourne `{ batchNumber, matches, insight, hasMore }`. `hasMore: false`
+   * signale au frontend qu'il n'y a plus de batch à demander.
+   */
+  @Post(':sessionId/next-batch')
+  nextBatch(@Param('sessionId') sessionId: string) {
+    return this.questionnaire.generateNextBatch(sessionId);
   }
 
   /**

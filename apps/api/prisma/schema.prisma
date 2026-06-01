@@ -25,6 +25,12 @@ model Question {
   active         Boolean          @default(true)
   askIfEquals    Json?
   askIfNotEquals Json?
+  /// Affiche la question si la réponse à la clé EST dans le tableau.
+  /// Ex : { "situation": ["actif", "reconversion"] }
+  askIfIn        Json?
+  /// Affiche la question si la réponse à la clé N'EST PAS dans le tableau.
+  /// Ex : { "situation": ["lycee", "etudes_longues"] }
+  askIfNotIn     Json?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   options        QuestionOption[]
@@ -67,12 +73,74 @@ model QuestionnaireSession {
   ///   - Gratuit  → now + 30 jours
   ///   - Payant   → now + 1 an (prolongé à la confirmation de paiement)
   expiresAt    DateTime?
+  /// Portrait IA généré à la fin du questionnaire (Phase 2).
+  /// Contient l'archétype, les 3 forces, ce qui anime et ce qui épuise.
+  /// Format : PortraitContent (cf. ai.service.ts).
+  /// Null si l'IA était indisponible — le frontend skippe l'écran portrait.
+  portrait     Json?
+  /// Résultats de la 2e passe (affinés par les notes utilisateur, Phase 4).
+  /// Null tant que l'utilisateur n'a pas payé et déclenché le raffinement.
+  /// Format : Array<RefinedMatch> — même structure que les matches de la passe 1.
+  refinedMatches Json?
+  /// Insight IA généré avec la 2e passe : phrase expliquant ce que les notes
+  /// révèlent sur le profil (ex: "Tu apprécies les métiers créatifs et techniques").
+  refineInsight  String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   answers   SessionAnswer[]
   matches   MatchResult[]
+  ratings   JobRating[]
+  refinedBatches RefinedBatch[]
 
   @@index([email])
+}
+
+/// Un "batch" de résultats affinés généré par l'IA à partir des notes
+/// accumulées (swipe deck — batches progressifs).
+///
+/// La passe 1 gratuite vit dans `MatchResult` (rank 1-10). Les batches affinés
+/// commencent donc à `batchNumber = 2`. Chaque appel à `generateNextBatch`
+/// crée une ligne ici : c'est le cache (un batch n'est jamais recalculé) ET
+/// l'historique permettant d'exclure les métiers déjà servis du batch suivant.
+model RefinedBatch {
+  id          String   @id @default(cuid())
+  sessionId   String
+  /// Index global du batch. 1 = passe gratuite (dans MatchResult), 2+ = ici.
+  batchNumber Int
+  /// Array<MatchOutput> hydraté (job complet + score + rationale), figé au moment
+  /// de la génération — même structure que ce que le frontend stocke en local.
+  matches     Json
+  /// Phrase IA d'introduction du batch ("Tu apprécies les métiers qui…").
+  insight     String?
+  /// Nombre total de notes de la session au moment de générer ce batch.
+  /// Sert de garde-fou anti-spam : on exige N nouvelles notes avant le batch suivant.
+  ratingsAtCreation Int @default(0)
+  createdAt   DateTime @default(now())
+  session     QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, batchNumber])
+  @@index([sessionId])
+}
+
+/// Note posée par l'utilisateur sur un métier après avoir vu ses résultats.
+/// Signal clé pour la 2e passe de matching (Phase 4).
+model JobRating {
+  id        String   @id @default(cuid())
+  sessionId String
+  /// Code ROME du métier noté (ex: "M1805").
+  jobSlug   String
+  /// "like" | "dislike" | "neutral"
+  rating    String
+  /// Raison optionnelle du dislike — chips pré-définies et/ou texte libre.
+  /// Null pour les "like" et "neutral", optionnel pour les "dislike".
+  /// Signal très utile pour affiner la 2e passe IA.
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  session   QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, jobSlug])  // une note par couple — idempotent
+  @@index([sessionId])
 }
 
 model SessionAnswer {
@@ -85,6 +153,9 @@ model SessionAnswer {
   freeText          String?
   // Poids métiers extraits par l'IA à partir du texte libre (cache pour éviter de rappeler l'IA)
   extractedWeights  Json?
+  // Phase 6 — question de relance générée par l'IA + réponse de l'utilisateur
+  followUpQuestion  String?
+  followUpAnswer    String?
   createdAt         DateTime             @default(now())
   session           QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   question          Question             @relation(fields: [questionId], references: [id], onDelete: Restrict)

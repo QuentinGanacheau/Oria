@@ -46,7 +46,7 @@ export function createAiProvider(
   config: ConfigService,
   logger: Logger,
 ): AiProvider | null {
-  const model = config.get<string>('AI_MODEL')?.trim();
+  const model = config.get<string>('AI_MODEL')?.trim() || undefined;
 
   // ── Lecture de la liste de providers ─────────────────────────────────
   const rawChain = config.get<string>('AI_PROVIDERS')?.toLowerCase().trim();

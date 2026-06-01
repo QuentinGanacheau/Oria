@@ -25,7 +25,7 @@ export class MatchingService {
   private readonly logger = new Logger(MatchingService.name);
 
   /** Valeurs par défaut pour les options du pipeline. */
-  private static readonly DEFAULTS: Required<MatchingOptions> = {
+  private static readonly DEFAULTS: Omit<Required<MatchingOptions>, 'userContext'> = {
     topDomainsCount: 3,
     finalTopN: 10,
   };
@@ -84,7 +84,7 @@ export class MatchingService {
     this.logger.log(`${candidates.length} métiers candidats à reranker.`);
 
     // 3. Reranking IA — null si IA totalement indisponible
-    const ranked = await this.jobRanker.rank(candidates, answers);
+    const ranked = await this.jobRanker.rank(candidates, answers, opts.userContext);
     if (ranked === null) {
       // Pas de fallback : sans IA, le domaine seul donne des résultats trop
       // hétérogènes pour être présentés à l'utilisateur. L'appelant affichera
