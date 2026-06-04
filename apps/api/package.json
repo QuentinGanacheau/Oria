@@ -17,10 +17,12 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
+    "db:deploy": "prisma db push && prisma db seed",
     "sync:rome": "tsx src/scripts/sync-rome.ts",
     "backfill:rome-domains": "tsx src/scripts/backfill-rome-domains.ts",
     "inspect:rome-api": "tsx src/scripts/inspect-rome-api.ts"
