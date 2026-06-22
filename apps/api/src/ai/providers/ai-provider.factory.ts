@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AnthropicProvider } from './anthropic.provider';
 import { ChainProvider } from './chain.provider';
 import { GeminiProvider } from './gemini.provider';
+import { MistralProvider } from './mistral.provider';
 import { OpenAiProvider } from './openai.provider';
 import type { AiProvider } from './ai-provider.interface';
 
@@ -15,12 +16,18 @@ const DEFAULT_MODELS: Record<string, string> = {
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4.1-mini',
   anthropic: 'claude-haiku-4-5',
+  mistral: 'mistral-small-latest',
 };
 
-type SupportedProvider = 'gemini' | 'openai' | 'anthropic';
+type SupportedProvider = 'gemini' | 'openai' | 'anthropic' | 'mistral';
 
 function isSupportedProvider(value: string): value is SupportedProvider {
-  return value === 'gemini' || value === 'openai' || value === 'anthropic';
+  return (
+    value === 'gemini' ||
+    value === 'openai' ||
+    value === 'anthropic' ||
+    value === 'mistral'
+  );
 }
 
 /**
@@ -69,7 +76,7 @@ export function createAiProvider(
   for (const raw of rawList) {
     if (!isSupportedProvider(raw)) {
       logger.warn(
-        `Provider inconnu "${raw}" ignoré. Valeurs acceptées : gemini | openai | anthropic.`,
+        `Provider inconnu "${raw}" ignoré. Valeurs acceptées : gemini | openai | anthropic | mistral.`,
       );
       continue;
     }
@@ -126,6 +133,14 @@ function buildSingleProvider(
         return null;
       }
       return new AnthropicProvider(key, model);
+    }
+    case 'mistral': {
+      const key = config.get<string>('MISTRAL_API_KEY');
+      if (!key) {
+        logger.warn('mistral ignoré : MISTRAL_API_KEY absente.');
+        return null;
+      }
+      return new MistralProvider(key, model);
     }
   }
 }

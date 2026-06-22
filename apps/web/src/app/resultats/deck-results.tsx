@@ -137,8 +137,19 @@ export default function DeckResults() {
     })();
   }, []);
 
+  /**
+   * Miroir de `session` pour les callbacks (onSwipe) qui doivent lire les
+   * notes les plus récentes sans dépendre de leur closure — sinon deux notes
+   * rapprochées repartent du même état et la 2e écrase la 1re.
+   */
+  const sessionRef = useRef<StoredSession | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
   /** Met à jour la session locale + persiste en sessionStorage. */
   const persist = useCallback((next: StoredSession) => {
+    sessionRef.current = next; // synchrone : la note suivante lit déjà ce state
     setSession(next);
     const { savedAt: _, ...rest } = next;
     saveSession({ ...rest });
@@ -300,9 +311,12 @@ export default function DeckResults() {
   /** Enregistre la note d'une carte swipée (POST /rate + state local). */
   const onSwipe = useCallback(
     (slug: string, direction: SwipeDirection) => {
-      if (!session) return;
+      // On lit la session via la ref (et non la closure) pour fusionner sur les
+      // notes déjà posées, même si plusieurs swipes s'enchaînent rapidement.
+      const s = sessionRef.current;
+      if (!s) return;
       const rating: "like" | "dislike" | "neutral" = direction;
-      const p = apiPost(`/v1/questionnaire/${session.sessionId}/rate`, {
+      const p = apiPost(`/v1/questionnaire/${s.sessionId}/rate`, {
         jobSlug: slug,
         rating,
       }).catch(() => {
@@ -312,11 +326,11 @@ export default function DeckResults() {
       });
       pendingRates.current.push(p);
       persist({
-        ...session,
-        ratings: { ...session.ratings, [slug]: rating },
+        ...s,
+        ratings: { ...s.ratings, [slug]: rating },
       });
     },
-    [session, persist],
+    [persist],
   );
 
   /** Appelé quand la dernière carte du tour a été swipée. */
@@ -557,6 +571,12 @@ function PaywallScreen(props: {
   const ratings = props.session.ratings ?? {};
   const likes = Object.values(ratings).filter((v) => v === "like").length;
   const dislikes = Object.values(ratings).filter((v) => v === "dislike").length;
+  // Pistes gratuites likées — on garde un accès à leur fiche depuis le paywall,
+  // sinon les cartes notées disparaissent du deck et deviennent inatteignables.
+  const likedCards = props.session.matches
+    .slice(0, FREE_CARDS)
+    .map((m, i) => ({ match: m, rank: i + 1 }))
+    .filter(({ match }) => ratings[match.job.slug] === "like");
   return (
     <div className="mt-6 rounded-3xl border border-line bg-surface p-7 shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)]">
       <h2 className="font-serif text-2xl tracking-tight text-ink">
@@ -570,6 +590,28 @@ function PaywallScreen(props: {
           <ThumbsDown className="size-4 text-no" strokeWidth={1.9} /> {dislikes}
         </span>
       </p>
+
+      {/* Récap des pistes likées — lien vers chaque fiche pour ne pas les perdre. */}
+      {likedCards.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-ok/30 bg-ok/[0.06] p-4">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-ok">
+            <ThumbsUp className="size-3.5" strokeWidth={2} /> Tes coups de cœur
+          </p>
+          <ul className="mt-2.5 flex flex-col gap-1.5">
+            {likedCards.map(({ match, rank }) => (
+              <li key={match.job.slug}>
+                <Link
+                  href={`/metiers/${match.job.slug}?sessionId=${props.session.sessionId}&rank=${rank}`}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-ink underline-offset-2 hover:text-accent-ink hover:underline"
+                >
+                  <ArrowRight className="size-4 text-accent" /> {match.job.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="mt-5 text-sm font-medium text-ink">
         Débloque la suite :
       </p>
@@ -603,7 +645,7 @@ function PaywallScreen(props: {
           {props.checkoutLoading
             ? "Redirection…"
             : props.stripeOn
-              ? "Débloquer · 15€"
+              ? "Débloquer · 5,90 €"
               : "Paiement non configuré"}
           {props.stripeOn && !props.checkoutLoading && <ArrowRight className="size-4" />}
         </button>

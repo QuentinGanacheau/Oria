@@ -41,9 +41,14 @@ export default function SwipeCard({ data, rank, onOpenSheet }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-line bg-surface shadow-[0_30px_60px_-32px_rgba(20,40,25,.34)]">
       {/* Bandeau score — dégradé vert, repère visuel fort en haut de carte */}
-      <div className="flex flex-none items-center justify-between bg-gradient-to-r from-accent-ink to-accent px-6 py-[18px] text-white">
-        <span className="text-[13px] font-semibold tracking-wide opacity-90">Piste #{rank}</span>
-        <span className="rounded-full bg-white/20 px-3 py-1.5 text-[13px] font-semibold tabular-nums backdrop-blur-sm">
+      <div className="flex flex-none items-center justify-between gap-3 bg-gradient-to-r from-accent-ink to-accent px-6 py-[18px] text-white">
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="shrink-0 text-[13px] font-semibold tracking-wide opacity-90">
+            Piste #{rank}
+          </span>
+          <span className="truncate text-[13px] font-semibold">{data.title}</span>
+        </span>
+        <span className="shrink-0 rounded-full bg-white/20 px-3 py-1.5 text-[13px] font-semibold tabular-nums backdrop-blur-sm">
           {data.scorePercent}% d&apos;adéquation
         </span>
       </div>
@@ -105,7 +110,7 @@ export default function SwipeCard({ data, rank, onOpenSheet }: Props) {
                   {data.skills.slice(0, 5).map((s) => (
                     <span
                       key={s}
-                      className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-[12.5px] text-ink-soft"
+                      className="rounded-lg border border-accent/25 bg-accent-soft px-3 py-1.5 text-[12.5px] font-medium leading-snug text-accent-ink [overflow-wrap:anywhere]"
                     >
                       {s}
                     </span>
@@ -123,12 +128,18 @@ export default function SwipeCard({ data, rank, onOpenSheet }: Props) {
           </div>
         )}
 
-        {/* Pousse le lien en bas de carte */}
+        {/* Pousse le lien en bas de carte. La carte entière est cliquable
+            (géré par le SwipeDeck) ; ce bouton reste comme indice visuel +
+            cible accessible au clavier. stopPropagation évite la double
+            navigation (clic bouton + clic carte parente). */}
         <div className="mt-auto pt-5">
           <button
             type="button"
-            onClick={() => onOpenSheet?.(data.slug)}
-            className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink underline-offset-2 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSheet?.(data.slug);
+            }}
+            className="inline-flex items-center gap-2 rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent-ink transition hover:bg-accent hover:text-white"
           >
             <Info className="size-[15px]" strokeWidth={1.8} /> Voir la fiche complète
           </button>
