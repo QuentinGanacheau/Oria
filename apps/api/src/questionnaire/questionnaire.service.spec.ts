@@ -15,6 +15,7 @@ const aiMock = {
   generateRationales: vi.fn().mockResolvedValue(null),
   chooseQuestion: vi.fn().mockResolvedValue(null),
   rankJobsWithPreferences: vi.fn().mockResolvedValue(null),
+  generateProbe: vi.fn().mockResolvedValue(null),
 };
 
 const matchingMock = {
@@ -434,6 +435,241 @@ describe('QuestionnaireService', () => {
       const created = prisma.refinedBatch.create.mock.calls[0][0].data;
       expect(created.batchNumber).toBe(3);
       expect(created.ratingsAtCreation).toBe(6);
+    });
+  });
+
+  // ── generateNextBatchProbe (question d'affinage A/B) ──────────────────────
+
+  describe('generateNextBatchProbe', () => {
+    function makeSession(overrides: {
+      isPaid?: boolean;
+      ratings?: Array<{ jobSlug: string; rating: string }>;
+      refinedBatches?: Array<{ batchNumber: number; matches: unknown[] }>;
+      batchProbes?: Array<{
+        batchNumber: number;
+        intro: string;
+        axisA: string;
+        axisB: string;
+        answer: string | null;
+      }>;
+    }) {
+      return {
+        id: 'sess-1',
+        isPaid: overrides.isPaid ?? true,
+        ratings: (overrides.ratings ?? []).map((r) => ({
+          jobSlug: r.jobSlug,
+          rating: r.rating,
+          reason: null,
+        })),
+        matches: [],
+        refinedBatches: overrides.refinedBatches ?? [],
+        batchProbes: overrides.batchProbes ?? [],
+        answers: [
+          {
+            question: { key: 'situation', text: 'Ta situation ?' },
+            option: { key: 'actif', label: 'En poste' },
+            freeText: null,
+            followUpQuestion: null,
+            followUpAnswer: null,
+          },
+        ],
+      };
+    }
+
+    function makePrisma(session: ReturnType<typeof makeSession>) {
+      return {
+        questionnaireSession: {
+          findUnique: vi.fn().mockResolvedValue(session),
+        },
+        romeJob: {
+          findMany: vi.fn().mockImplementation((args: any) =>
+            args?.select?.codeGrandDomaine
+              ? Promise.resolve(
+                  session.ratings.map((r) => ({
+                    code: r.jobSlug,
+                    libelle: r.jobSlug,
+                    codeGrandDomaine: 'M',
+                  })),
+                )
+              : Promise.resolve([{ code: 'C1', libelle: 'Metier 1' }]),
+          ),
+        },
+        batchProbe: { create: vi.fn().mockResolvedValue({}) },
+      } as any;
+    }
+
+    function build(prisma: any) {
+      return new QuestionnaireService(
+        prisma,
+        jobsMock as any,
+        aiMock as any,
+        matchingMock as any,
+      );
+    }
+
+    const ratings3 = [
+      { jobSlug: 'M1', rating: 'like' },
+      { jobSlug: 'M2', rating: 'dislike' },
+      { jobSlug: 'M3', rating: 'like' },
+    ];
+
+    it('refuse si la session nest pas payee', async () => {
+      vi.stubEnv('DEV_BYPASS_PAYMENT', 'false');
+      const svc = build(
+        makePrisma(makeSession({ isPaid: false, ratings: ratings3 })),
+      );
+      await expect(svc.generateNextBatchProbe('sess-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      vi.unstubAllEnvs();
+    });
+
+    it('renvoie null sans appeler lIA quand le plafond est atteint', async () => {
+      const refinedBatches = Array.from({ length: 5 }, (_, i) => ({
+        batchNumber: i + 2,
+        matches: [],
+      }));
+      const svc = build(
+        makePrisma(makeSession({ ratings: ratings3, refinedBatches })),
+      );
+      const res = await svc.generateNextBatchProbe('sess-1');
+      expect(res).toBeNull();
+      expect(aiMock.generateProbe).not.toHaveBeenCalled();
+    });
+
+    it('idempotent : renvoie le probe existant sans regenerer', async () => {
+      const existing = {
+        batchNumber: 2,
+        intro: 'Q ?',
+        axisA: 'A',
+        axisB: 'B',
+        answer: null,
+      };
+      const svc = build(
+        makePrisma(makeSession({ ratings: ratings3, batchProbes: [existing] })),
+      );
+      const res = await svc.generateNextBatchProbe('sess-1');
+      expect(res).toEqual({ intro: 'Q ?', axisA: 'A', axisB: 'B' });
+      expect(aiMock.generateProbe).not.toHaveBeenCalled();
+    });
+
+    it('genere et persiste un nouveau probe pour le batch cible', async () => {
+      const prisma = makePrisma(makeSession({ ratings: ratings3 }));
+      const svc = build(prisma);
+      aiMock.generateProbe.mockResolvedValueOnce({
+        intro: 'Contact ou concret ?',
+        axisA: 'Le contact',
+        axisB: 'Le concret',
+      });
+      const res = await svc.generateNextBatchProbe('sess-1');
+      expect(res).toEqual({
+        intro: 'Contact ou concret ?',
+        axisA: 'Le contact',
+        axisB: 'Le concret',
+      });
+      expect(prisma.batchProbe.create).toHaveBeenCalledOnce();
+      expect(prisma.batchProbe.create.mock.calls[0][0].data.batchNumber).toBe(2);
+    });
+
+    it('skip silencieux : null de lIA → null, aucune persistance', async () => {
+      const prisma = makePrisma(makeSession({ ratings: ratings3 }));
+      const svc = build(prisma);
+      aiMock.generateProbe.mockResolvedValueOnce(null);
+      const res = await svc.generateNextBatchProbe('sess-1');
+      expect(res).toBeNull();
+      expect(prisma.batchProbe.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── generateNextBatch : injection de la réponse au probe ──────────────────
+
+  describe('generateNextBatch avec probeAnswer', () => {
+    it('persiste la reponse et linjecte dans les answers du reranking', async () => {
+      const session = {
+        id: 'sess-1',
+        isPaid: true,
+        ratings: [
+          { jobSlug: 'M1', rating: 'like', reason: null },
+          { jobSlug: 'M2', rating: 'like', reason: null },
+          { jobSlug: 'M3', rating: 'like', reason: null },
+        ],
+        matches: [],
+        refinedBatches: [],
+        batchProbes: [
+          {
+            batchNumber: 2,
+            intro: 'Contact ou concret ?',
+            axisA: 'Le contact',
+            axisB: 'Le concret',
+            answer: null,
+          },
+        ],
+        answers: [
+          {
+            question: { key: 'situation', text: 'Ta situation ?' },
+            option: { key: 'actif', label: 'En poste' },
+            freeText: null,
+            followUpQuestion: null,
+            followUpAnswer: null,
+          },
+        ],
+      };
+      const prisma = {
+        questionnaireSession: {
+          findUnique: vi.fn().mockResolvedValue(session),
+        },
+        romeJob: {
+          findMany: vi.fn().mockImplementation((args: any) =>
+            args?.select?.codeGrandDomaine
+              ? Promise.resolve(
+                  session.ratings.map((r) => ({
+                    code: r.jobSlug,
+                    libelle: r.jobSlug,
+                    codeGrandDomaine: 'M',
+                  })),
+                )
+              : Promise.resolve([{ code: 'C1', libelle: 'Metier 1' }]),
+          ),
+        },
+        refinedBatch: { create: vi.fn().mockResolvedValue({}) },
+        batchProbe: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      } as any;
+      const svc = new QuestionnaireService(
+        prisma,
+        jobsMock as any,
+        aiMock as any,
+        matchingMock as any,
+      );
+      aiMock.rankJobsWithPreferences.mockResolvedValueOnce({
+        scores: { C1: 80 },
+        insight: 'ok',
+      });
+      jobsMock.findBySlug.mockImplementation((slug: string) =>
+        Promise.resolve({ slug, title: slug, tagline: '' }),
+      );
+
+      await svc.generateNextBatch('sess-1', 'Le contact');
+
+      // La réponse est persistée sur le BatchProbe du batch cible (2).
+      expect(prisma.batchProbe.updateMany).toHaveBeenCalledWith({
+        where: { sessionId: 'sess-1', batchNumber: 2 },
+        data: { answer: 'Le contact' },
+      });
+      // …et transmise au reranking dans le canal dédié probeChoices (signal
+      // emphatisé, pas dilué dans les réponses générales).
+      const callArg = aiMock.rankJobsWithPreferences.mock.calls[0][0] as {
+        answers: Array<{ question: string; answer: string }>;
+        probeChoices?: Array<{ question: string; answer: string }>;
+      };
+      expect(callArg.probeChoices).toContainEqual({
+        question: 'Contact ou concret ?',
+        answer: 'Le contact',
+      });
+      // Le probe ne doit PAS être dupliqué dans les réponses générales.
+      expect(callArg.answers).not.toContainEqual({
+        question: 'Contact ou concret ?',
+        answer: 'Le contact',
+      });
     });
   });
 });

@@ -3,6 +3,7 @@ import type {
   ActionPlan,
   PersonalizedSheetContent,
   PortraitContent,
+  ProbeQuestion,
   RankWithPreferencesInput,
   RankWithPreferencesResult,
 } from './ai.service';
@@ -21,6 +22,16 @@ export const MOCK_FOLLOW_UP_QUESTIONS: Record<string, string | null> = {
   ce_qui_pese: 'Ce que tu décris, c\'est lié aux missions elles-mêmes ou à l\'environnement autour ?',
   ce_qui_garde: null,
   journee_ideale: 'Dans cette journée, tu serais plutôt seul·e ou en interaction avec des gens ?',
+};
+
+// ── Question d'affinage A/B (swipe deck — BatchProbe) ────────────────────────
+// Probe déterministe affiché à chaque batch en DEV_MOCK_AI=true (jamais null),
+// pour que la feature soit visible et testable hors-ligne — contrairement aux
+// relances Phase 6 dont le gating IA réel les rendait quasi invisibles.
+export const MOCK_PROBE: ProbeQuestion = {
+  intro: "Dans ce qui t'a plu, qu'est-ce qui compte le plus ?",
+  axisA: 'Le contact humain',
+  axisB: "L'impact concret",
 };
 
 // ── Plans d'action (Phase 5) ──────────────────────────────────────────────────

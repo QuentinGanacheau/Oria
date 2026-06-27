@@ -16,6 +16,8 @@ type Job = {
   formations: string[];
   salaryRangeHint: string;
   workContext: string;
+  recruitmentLevel: "high" | "medium" | "low" | null;
+  offerCount: number | null;
 };
 
 type TabId = "analyse" | "metier";

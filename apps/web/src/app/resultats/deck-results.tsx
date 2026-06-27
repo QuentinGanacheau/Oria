@@ -45,10 +45,14 @@ const FREE_CARDS = 3;
 /** Durée d'affichage de l'écran "nouveau paquet" entre deux tours. */
 const INTER_BATCH_PAUSE_MS = 1800;
 
+/** Question d'affinage A/B servie entre deux batches (swipe deck). */
+type ProbeQuestion = { intro: string; axisA: string; axisB: string };
+
 type Screen =
   | { kind: "deck" }
   | { kind: "paywall" }
   | { kind: "fetching" }
+  | { kind: "probe"; probe: ProbeQuestion }
   | { kind: "inter-batch"; insight: string }
   | { kind: "exhausted" };
 
@@ -157,7 +161,7 @@ export default function DeckResults() {
 
   /** Appelle `/next-batch` et enchaîne sur l'écran de transition + nouveau tour. */
   const fetchNextBatch = useCallback(
-    async (s: StoredSession) => {
+    async (s: StoredSession, probeAnswer?: string) => {
       setScreen({ kind: "fetching" });
       try {
         const result = await apiPost<{
@@ -165,7 +169,10 @@ export default function DeckResults() {
           matches: StoredMatch[];
           insight: string;
           hasMore: boolean;
-        }>(`/v1/questionnaire/${s.sessionId}/next-batch`, {});
+        }>(
+          `/v1/questionnaire/${s.sessionId}/next-batch`,
+          probeAnswer ? { probeAnswer } : {},
+        );
 
         // Backend signale qu'il n'a plus rien à proposer.
         if (result.matches.length === 0) {
@@ -202,6 +209,40 @@ export default function DeckResults() {
     [persist],
   );
 
+  /**
+   * Demande la question d'affinage A/B avant le prochain batch. Si l'IA en
+   * renvoie une, on l'affiche (l'utilisateur tape un axe ou passe) ; sinon —
+   * ou en cas d'erreur — on enchaîne directement sur le batch (skip silencieux).
+   */
+  const startNextBatch = useCallback(
+    async (s: StoredSession) => {
+      setScreen({ kind: "fetching" });
+      try {
+        const { probe } = await apiPost<{ probe: ProbeQuestion | null }>(
+          `/v1/questionnaire/${s.sessionId}/next-batch/probe`,
+          {},
+        );
+        if (probe?.intro) {
+          setScreen({ kind: "probe", probe });
+          return;
+        }
+      } catch {
+        // Skip silencieux : le probe est un bonus, jamais un bloqueur.
+      }
+      await fetchNextBatch(s);
+    },
+    [fetchNextBatch],
+  );
+
+  /** Réponse à la question A/B (ou skip) → lance le batch avec le signal. */
+  const onProbeAnswer = useCallback(
+    (answer?: string) => {
+      const s = sessionRef.current;
+      if (s) void fetchNextBatch(s, answer);
+    },
+    [fetchNextBatch],
+  );
+
   // ── Retour depuis Stripe ─────────────────────────────────────────
   // Stripe redirige vers /resultats?session_id=cs_xxx après paiement.
   // On vérifie côté serveur (clé secrète Stripe) avant de déverrouiller.
@@ -219,7 +260,7 @@ export default function DeckResults() {
           setUnlocked();
           const updated = { ...session, hasEmail: true };
           persist(updated);
-          await fetchNextBatch(updated);
+          await startNextBatch(updated);
         } else {
           setVerifyMsg("Session de paiement non finalisée.");
         }
@@ -227,7 +268,7 @@ export default function DeckResults() {
         setVerifyMsg("Impossible de vérifier le paiement.");
       }
     })();
-  }, [searchParams, session, persist, fetchNextBatch]);
+  }, [searchParams, session, persist, startNextBatch]);
 
   /** Décide quoi faire quand toutes les cartes du tour ont été swipées. */
   const handleRoundEnd = useCallback(
@@ -247,9 +288,9 @@ export default function DeckResults() {
         setScreen({ kind: "exhausted" });
         return;
       }
-      await fetchNextBatch(s);
+      await startNextBatch(s);
     },
-    [roundIndex, fetchNextBatch],
+    [roundIndex, startNextBatch],
   );
 
   // ── Snapshot des cartes du tour : stable pendant qu'on swipe ───
@@ -294,7 +335,7 @@ export default function DeckResults() {
           setVerifyMsg(
             "Paiement confirmé — on génère ton premier paquet affiné…",
           );
-          await fetchNextBatch(updated);
+          await startNextBatch(updated);
         } else {
           setVerifyMsg("Session de paiement non finalisée.");
         }
@@ -494,6 +535,10 @@ export default function DeckResults() {
           </CenterMsg>
         )}
 
+        {screen.kind === "probe" && (
+          <ProbeScreen probe={screen.probe} onAnswer={onProbeAnswer} />
+        )}
+
         {screen.kind === "inter-batch" && (
           <InterBatch insight={screen.insight} />
         )}
@@ -650,6 +695,50 @@ function PaywallScreen(props: {
           {props.stripeOn && !props.checkoutLoading && <ArrowRight className="size-4" />}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Question d'affinage A/B entre deux batches. L'utilisateur tape un axe (le
+ * label part comme signal de préférence dans le batch suivant) ou passe.
+ */
+function ProbeScreen({
+  probe,
+  onAnswer,
+}: {
+  probe: ProbeQuestion;
+  onAnswer: (answer?: string) => void;
+}) {
+  return (
+    <div className="mt-6 flex flex-col items-center gap-6 px-2 text-center">
+      <div className="flex flex-col items-center gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
+          <Sparkles className="size-3.5" strokeWidth={1.8} /> On affine
+        </p>
+        <p className="max-w-md font-serif text-[22px] leading-snug tracking-tight text-ink">
+          {probe.intro}
+        </p>
+      </div>
+      <div className="grid w-full max-w-md grid-cols-1 gap-3 sm:grid-cols-2">
+        {[probe.axisA, probe.axisB].map((axis) => (
+          <button
+            key={axis}
+            type="button"
+            onClick={() => onAnswer(axis)}
+            className="rounded-2xl border border-line bg-surface px-5 py-6 text-base font-semibold text-ink shadow-[0_18px_40px_-32px_rgba(20,40,25,.4)] transition hover:border-accent hover:bg-accent-soft hover:text-accent-ink"
+          >
+            {axis}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onAnswer()}
+        className="text-sm font-medium text-muted underline-offset-2 transition-opacity hover:opacity-70 hover:underline"
+      >
+        Passer →
+      </button>
     </div>
   );
 }

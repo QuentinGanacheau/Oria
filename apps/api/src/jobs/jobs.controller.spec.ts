@@ -15,6 +15,8 @@ const buildJobProfile = (slug: string, title: string): JobProfile => ({
   formations: ['Bac+2'],
   salaryRangeHint: '',
   workContext: 'Bureau',
+  recruitmentLevel: null,
+  offerCount: null,
 });
 
 // ─── Mock service ─────────────────────────────────────────────────────────────

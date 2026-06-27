@@ -95,6 +95,9 @@ export class RomeSyncService {
       }
     }
 
+    // Une fois tous les offerCount connus, on dérive les paliers relatifs.
+    await this.finalizeRecruitmentLevels();
+
     const durationMs = Date.now() - startedAt;
     const report: SyncReport = {
       total: list.length,
@@ -141,7 +144,11 @@ export class RomeSyncService {
   /** Récupère et upsert un métier individuel. Lance une exception en cas d'échec. */
   private async syncOne(code: string): Promise<void> {
     const details = await this.api.getMetierDetails(code);
-    const data = this.toPrismaData(details);
+    // Comptage des offres en ligne — best-effort : `countOffersByRome` renvoie
+    // null (jamais d'exception) si l'API Offres est indisponible ou non configurée,
+    // pour ne pas faire échouer la sync du métier sur une donnée d'agrément.
+    const offerCount = await this.api.countOffersByRome(code);
+    const data = this.toPrismaData(details, offerCount);
 
     await this.prisma.romeJob.upsert({
       where: { code: data.code },
@@ -160,7 +167,10 @@ export class RomeSyncService {
    *  - Savoirs : items de type SAVOIR dans `competencesMobilisees` (full set).
    *  - Accès emploi : texte libre direct de l'API.
    */
-  private toPrismaData(d: RomeMetierDetails): Prisma.RomeJobCreateInput {
+  private toPrismaData(
+    d: RomeMetierDetails,
+    offerCount: number | null,
+  ): Prisma.RomeJobCreateInput {
     // Hiérarchie domaine (imbriquée dans la réponse) — fallback sur dérivation.
     const grandDomaineApi = d.domaineProfessionnel?.grandDomaine;
     const codeGrandDomaine =
@@ -185,6 +195,9 @@ export class RomeSyncService {
       libelle: d.libelle,
       definition: d.definition ?? null,
       accesEmploi: d.accesEmploi ?? null,
+      offerCount,
+      // recruitmentLevel est calculé en passe finale (finalizeRecruitmentLevels)
+      // une fois tous les offerCount connus, car c'est un palier relatif.
       codeGrandDomaine,
       libelleGrandDomaine,
       codeDomaine,
@@ -203,6 +216,83 @@ export class RomeSyncService {
           : Prisma.JsonNull,
       syncedAt: new Date(),
     };
+  }
+
+  /**
+   * Dérive `recruitmentLevel` ("high"|"medium"|"low") à partir des `offerCount`
+   * relevés, en passe finale (tous les compteurs sont alors connus).
+   *
+   * Normalisation par percentile sur les métiers ayant **au moins une offre** :
+   * cela corrige le biais de taille de domaine (un gros domaine a mécaniquement
+   * plus d'offres). Le niveau est donc *relatif* aux autres métiers.
+   *  - count >= p66  → "high"   (tiers du haut)
+   *  - count >= p33  → "medium"
+   *  - count <  p33  (0 inclus) → "low"
+   *  - offerCount null (pas de donnée) → recruitmentLevel remis à null.
+   *
+   * Les seuils sont calculés sur les compteurs strictement positifs pour ne pas
+   * être écrasés par la masse éventuelle de métiers à zéro offre.
+   */
+  private async finalizeRecruitmentLevels(): Promise<void> {
+    const rows = await this.prisma.romeJob.findMany({
+      select: { offerCount: true },
+    });
+
+    const positives = rows
+      .map((r) => r.offerCount)
+      .filter((c): c is number => typeof c === 'number' && c > 0)
+      .sort((a, b) => a - b);
+
+    // Pas de donnée d'offres exploitable (API non configurée, tout à zéro/null) :
+    // on s'assure juste de ne pas laisser de palier obsolète d'une sync précédente.
+    if (positives.length === 0) {
+      await this.prisma.romeJob.updateMany({
+        data: { recruitmentLevel: null },
+      });
+      this.logger.log(
+        "Aucune donnée d'offres exploitable — paliers de recrutement non calculés.",
+      );
+      return;
+    }
+
+    const p33 = this.percentile(positives, 0.33);
+    const p66 = this.percentile(positives, 0.66);
+
+    await Promise.all([
+      // Pas de donnée → pas de palier.
+      this.prisma.romeJob.updateMany({
+        where: { offerCount: null },
+        data: { recruitmentLevel: null },
+      }),
+      this.prisma.romeJob.updateMany({
+        where: { offerCount: { gte: p66 } },
+        data: { recruitmentLevel: 'high' },
+      }),
+      this.prisma.romeJob.updateMany({
+        where: { offerCount: { gte: p33, lt: p66 } },
+        data: { recruitmentLevel: 'medium' },
+      }),
+      this.prisma.romeJob.updateMany({
+        where: { offerCount: { not: null, lt: p33 } },
+        data: { recruitmentLevel: 'low' },
+      }),
+    ]);
+
+    this.logger.log(
+      `Paliers de recrutement calculés sur ${positives.length} métiers avec offres (seuils : medium≥${p33}, high≥${p66}).`,
+    );
+  }
+
+  /**
+   * Valeur au percentile `p` (0–1) d'un tableau **trié croissant**, par rang
+   * le plus proche (nearest-rank). `sorted` doit être non vide.
+   */
+  private percentile(sorted: number[], p: number): number {
+    const index = Math.min(
+      sorted.length - 1,
+      Math.max(0, Math.ceil(p * sorted.length) - 1),
+    );
+    return sorted[index];
   }
 
   private sleep(ms: number): Promise<void> {

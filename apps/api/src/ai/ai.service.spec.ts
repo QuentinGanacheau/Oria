@@ -506,7 +506,8 @@ describe('AiService', () => {
         situation: 'lycee',
       });
 
-      expect(result).toEqual(VALID_SHEET_RESPONSE);
+      // actionPlan absent de la réponse IA → null (dégradation propre, Phase 5).
+      expect(result).toEqual({ ...VALID_SHEET_RESPONSE, actionPlan: null });
     });
 
     it('tronque nextSteps à 3 éléments maximum', async () => {

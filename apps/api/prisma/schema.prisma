@@ -91,6 +91,7 @@ model QuestionnaireSession {
   matches   MatchResult[]
   ratings   JobRating[]
   refinedBatches RefinedBatch[]
+  batchProbes    BatchProbe[]
 
   @@index([email])
 }
@@ -115,6 +116,36 @@ model RefinedBatch {
   /// Nombre total de notes de la session au moment de générer ce batch.
   /// Sert de garde-fou anti-spam : on exige N nouvelles notes avant le batch suivant.
   ratingsAtCreation Int @default(0)
+  createdAt   DateTime @default(now())
+  session     QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, batchNumber])
+  @@index([sessionId])
+}
+
+/// Question A/B d'affinage posée entre deux batches du swipe deck.
+///
+/// Avant de générer le batch N+1, l'IA repère une tension dans les swipes et
+/// propose deux axes opposés (`axisA` / `axisB`). Le label choisi est injecté
+/// dans `formattedAnswers` pour re-prioriser le batch — signal de préférence
+/// explicite qui complète le signal implicite des likes/dislikes.
+///
+/// `batchNumber` = le batch que la question précède (≥ 2). `@@unique` rend la
+/// génération idempotente : un refresh re-récupère la même question.
+/// `answer` null = question générée mais pas encore répondue (ou skipée).
+model BatchProbe {
+  id          String   @id @default(cuid())
+  sessionId   String
+  /// Batch que cette question précède (2+). Idempotence par couple session/batch.
+  batchNumber Int
+  /// Phrase d'introduction / la question elle-même ("Ce qui t'attire surtout ?").
+  intro       String
+  /// Premier axe proposé (ex: "le contact humain").
+  axisA       String
+  /// Second axe proposé (ex: "l'impact concret").
+  axisB       String
+  /// Label de l'axe choisi par l'utilisateur. Null tant que pas répondu / skipé.
+  answer      String?
   createdAt   DateTime @default(now())
   session     QuestionnaireSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -205,6 +236,15 @@ model RomeJob {
   /// Conditions d'accès au métier (niveau de diplôme, formations).
   /// Texte libre extrait du champ `accesEmploi` de l'API ROME.
   accesEmploi            String?
+  /// Nombre d'offres d'emploi actives pour ce code ROME, relevé pendant la sync
+  /// via l'API « Offres d'emploi v2 » (en-tête Content-Range). Null si l'appel
+  /// a échoué ou si l'API Offres n'est pas configurée.
+  offerCount             Int?
+  /// Niveau de recrutement dérivé de `offerCount`, normalisé par percentile sur
+  /// l'ensemble des métiers : "high" | "medium" | "low". Null tant que la passe
+  /// de finalisation n'a pas tourné (ou si aucune donnée d'offres).
+  /// Corrige le biais de taille de domaine : c'est un niveau *relatif* aux autres métiers.
+  recruitmentLevel       String?
   /// Date du dernier import — permet de détecter les fiches obsolètes.
   syncedAt               DateTime @default(now())
   createdAt              DateTime @default(now())

@@ -26,6 +26,14 @@ export type JobProfile = {
   formations: string[];
   salaryRangeHint: string;
   workContext: string;
+  /**
+   * Niveau de recrutement relatif (comparé aux autres métiers), dérivé du
+   * volume d'offres en ligne France Travail. Null si la donnée est indisponible
+   * (API Offres non configurée ou pas encore synchronisée) — le front masque alors le badge.
+   */
+  recruitmentLevel: 'high' | 'medium' | 'low' | null;
+  /** Nombre d'offres actives relevé à la dernière sync. Null si indisponible. */
+  offerCount: number | null;
 };
 
 @Injectable()
@@ -145,7 +153,19 @@ export class JobsService {
       // ROME ne fournit pas d'info de rémunération.
       salaryRangeHint: '',
       workContext: this.extractContextLabels(j.contextesTravail),
+      recruitmentLevel: this.normalizeRecruitmentLevel(j.recruitmentLevel),
+      offerCount: j.offerCount,
     };
+  }
+
+  /**
+   * Restreint la valeur stockée (String libre en DB) aux trois paliers attendus.
+   * Toute autre valeur (ou null) est traitée comme « pas de donnée ».
+   */
+  private normalizeRecruitmentLevel(
+    raw: string | null,
+  ): 'high' | 'medium' | 'low' | null {
+    return raw === 'high' || raw === 'medium' || raw === 'low' ? raw : null;
   }
 
   /**

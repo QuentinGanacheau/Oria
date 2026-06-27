@@ -8,6 +8,8 @@ import SaveButton from "./save-button";
 
 export const dynamic = "force-dynamic";
 
+type RecruitmentLevel = "high" | "medium" | "low" | null;
+
 type Job = {
   slug: string;
   title: string;
@@ -18,7 +20,27 @@ type Job = {
   formations: string[];
   salaryRangeHint: string;
   workContext: string;
+  recruitmentLevel: RecruitmentLevel;
+  offerCount: number | null;
 };
+
+/**
+ * Métadonnées d'affichage du badge de recrutement.
+ * Couleur + libellé reflètent le niveau *relatif* aux autres métiers (volume
+ * d'offres France Travail). Renvoie null si la donnée est indisponible.
+ */
+function recruitmentMeta(level: RecruitmentLevel) {
+  switch (level) {
+    case "high":
+      return { label: "Recrute beaucoup", dot: "bg-emerald-500", text: "text-emerald-700" };
+    case "medium":
+      return { label: "Recrute modérément", dot: "bg-amber-500", text: "text-amber-700" };
+    case "low":
+      return { label: "Recrute peu", dot: "bg-rose-500", text: "text-rose-700" };
+    default:
+      return null;
+  }
+}
 
 async function fetchJob(slug: string): Promise<Job> {
   const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
@@ -66,6 +88,21 @@ export default async function MetierPage({ params }: { params: Promise<{ slug: s
               <p className="mt-2.5 text-lg text-ink-soft">{job.tagline}</p>
             )}
             <div className="mt-5 flex flex-wrap gap-2.5">
+              {(() => {
+                const meta = recruitmentMeta(job.recruitmentLevel);
+                if (!meta) return null;
+                return (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[13.5px] text-ink-soft">
+                    <span className={`size-2 flex-none rounded-full ${meta.dot}`} />
+                    <span className={`font-semibold ${meta.text}`}>{meta.label}</span>
+                    {job.offerCount != null && job.offerCount > 0 && (
+                      <span className="text-muted">
+                        · {job.offerCount.toLocaleString("fr-FR")} offres en ligne
+                      </span>
+                    )}
+                  </span>
+                );
+              })()}
               {job.salaryRangeHint && (
                 <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[13.5px] text-ink-soft">
                   <Coins className="size-[15px] flex-none text-accent-ink" strokeWidth={1.8} />

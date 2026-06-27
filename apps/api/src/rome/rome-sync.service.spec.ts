@@ -8,11 +8,16 @@ import type { RomeMetierListItem, RomeMetierDetails } from './rome.types';
 const apiMock = {
   listMetiers: vi.fn(),
   getMetierDetails: vi.fn(),
+  // Par défaut : pas de donnée d'offres (null) — n'altère pas les tests existants.
+  countOffersByRome: vi.fn().mockResolvedValue(null),
 };
 
 const prismaMock = {
   romeJob: {
     upsert: vi.fn(),
+    // finalizeRecruitmentLevels : aucune donnée d'offres par défaut.
+    findMany: vi.fn().mockResolvedValue([]),
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
 };
 
@@ -58,6 +63,11 @@ describe('RomeSyncService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks efface l'historique mais pas les implémentations ; on rétablit
+    // explicitement les valeurs par défaut des mocks ajoutés pour la finalisation.
+    apiMock.countOffersByRome.mockResolvedValue(null);
+    prismaMock.romeJob.findMany.mockResolvedValue([]);
+    prismaMock.romeJob.updateMany.mockResolvedValue({ count: 0 });
     // On court-circuite le throttle et le retry-delay pour que les tests
     // s'exécutent instantanément sans jamais appeler de vrai setTimeout.
     vi.useFakeTimers();
@@ -488,6 +498,84 @@ describe('RomeSyncService', () => {
       expect(report.failed).toBe(1);
       // 1 seule tentative — pas de retry sur 404
       expect(apiMock.getMetierDetails).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─── Indicateur de recrutement ──────────────────────────────────────────────
+
+  describe('comptage des offres et paliers de recrutement', () => {
+    it('appelle countOffersByRome une fois par métier et stocke offerCount', async () => {
+      apiMock.listMetiers.mockResolvedValue([buildListItem('M1805')]);
+      apiMock.getMetierDetails.mockResolvedValue(buildDetails('M1805'));
+      apiMock.countOffersByRome.mockResolvedValue(1234);
+      prismaMock.romeJob.upsert.mockResolvedValue({});
+
+      const promise = service.syncAll();
+      await vi.runAllTimersAsync();
+      await promise;
+
+      expect(apiMock.countOffersByRome).toHaveBeenCalledWith('M1805');
+      const payload = prismaMock.romeJob.upsert.mock.calls[0][0].create;
+      expect(payload.offerCount).toBe(1234);
+    });
+
+    it('stocke offerCount = null si le comptage est indisponible', async () => {
+      apiMock.listMetiers.mockResolvedValue([buildListItem('M1805')]);
+      apiMock.getMetierDetails.mockResolvedValue(buildDetails('M1805'));
+      apiMock.countOffersByRome.mockResolvedValue(null);
+      prismaMock.romeJob.upsert.mockResolvedValue({});
+
+      const promise = service.syncAll();
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const payload = prismaMock.romeJob.upsert.mock.calls[0][0].create;
+      expect(payload.offerCount).toBeNull();
+    });
+
+    it('calcule les paliers par percentile sur les compteurs positifs', async () => {
+      apiMock.listMetiers.mockResolvedValue([buildListItem('M1805')]);
+      apiMock.getMetierDetails.mockResolvedValue(buildDetails('M1805'));
+      prismaMock.romeJob.upsert.mockResolvedValue({});
+      // Distribution contrôlée : p33 → seuil 40 (medium), p66 → seuil 70 (high).
+      prismaMock.romeJob.findMany.mockResolvedValue(
+        [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((offerCount) => ({
+          offerCount,
+        })),
+      );
+
+      const promise = service.syncAll();
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const calls = prismaMock.romeJob.updateMany.mock.calls.map((c) => c[0]);
+      const high = calls.find((c) => c.data.recruitmentLevel === 'high');
+      const medium = calls.find((c) => c.data.recruitmentLevel === 'medium');
+      const low = calls.find((c) => c.data.recruitmentLevel === 'low');
+
+      expect(high.where.offerCount).toEqual({ gte: 70 });
+      expect(medium.where.offerCount).toEqual({ gte: 40, lt: 70 });
+      expect(low.where.offerCount).toEqual({ not: null, lt: 40 });
+    });
+
+    it('ne calcule aucun palier si aucune offre positive (reset à null)', async () => {
+      apiMock.listMetiers.mockResolvedValue([buildListItem('M1805')]);
+      apiMock.getMetierDetails.mockResolvedValue(buildDetails('M1805'));
+      prismaMock.romeJob.upsert.mockResolvedValue({});
+      prismaMock.romeJob.findMany.mockResolvedValue([
+        { offerCount: 0 },
+        { offerCount: null },
+      ]);
+
+      const promise = service.syncAll();
+      await vi.runAllTimersAsync();
+      await promise;
+
+      // Un seul updateMany : remise à null globale (sans where), pas de leveling.
+      expect(prismaMock.romeJob.updateMany).toHaveBeenCalledTimes(1);
+      const [arg] = prismaMock.romeJob.updateMany.mock.calls[0];
+      expect(arg.where).toBeUndefined();
+      expect(arg.data).toEqual({ recruitmentLevel: null });
     });
   });
 

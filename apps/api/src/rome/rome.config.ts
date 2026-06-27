@@ -41,11 +41,27 @@ export class RomeConfig {
    * Scope OAuth requis pour ROME-Métiers v1.
    * Vérifie le scope exact dans ton tableau de bord francetravail.io
    * — il peut être différent selon les API auxquelles tu es abonné.
+   *
+   * ⚠️ Pour l'indicateur de recrutement, ajoute aussi le scope de l'API
+   * « Offres d'emploi v2 » (ex : `api_offresdemploiv2 o2dsoffre`), sinon
+   * `countOffersByRome` recevra un token sans droit sur cette API.
    */
   get scope(): string {
     return (
       this.config.get<string>('FRANCE_TRAVAIL_SCOPE') ??
       'api_rome-metiersv1 nomenclatureRome'
+    );
+  }
+
+  /**
+   * Chemin de l'endpoint de recherche d'offres (API Offres d'emploi v2).
+   * On y interroge `?codeROME=XXXX` et le total se lit dans l'en-tête
+   * `Content-Range`. Surchargeable pour tests / évolution d'API.
+   */
+  get offresSearchPath(): string {
+    return (
+      this.config.get<string>('FRANCE_TRAVAIL_OFFRES_PATH') ??
+      '/offresdemploi/v2/offres/search'
     );
   }
 }
