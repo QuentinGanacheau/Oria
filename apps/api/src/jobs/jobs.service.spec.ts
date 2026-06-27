@@ -24,6 +24,8 @@ const fakeRomeJob = {
     { libelle: 'En équipe' },
     { libelle: 'Sur écran' },
   ],
+  offerCount: 4200,
+  recruitmentLevel: 'high',
   syncedAt: new Date(),
 };
 
@@ -90,6 +92,8 @@ describe('JobsService', () => {
         'Architectures logicielles',
       ]);
       expect(result.workContext).toBe('En équipe · Sur écran');
+      expect(result.recruitmentLevel).toBe('high');
+      expect(result.offerCount).toBe(4200);
     });
 
     it('leve NotFoundException si le code est inconnu', async () => {

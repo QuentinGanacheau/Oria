@@ -10,6 +10,7 @@ import {
   AiService,
   type DislikedJobInput,
   type PortraitContent,
+  type ProbeQuestion,
   type RationaleInput,
   type RefinedJobInput,
 } from '../ai/ai.service';
@@ -65,6 +66,12 @@ type RefinementSession = {
     followUpQuestion: string | null;
     followUpAnswer: string | null;
   }>;
+  /**
+   * Probes A/B répondus (swipe deck). Le label choisi (`answer`) est injecté
+   * dans `formattedAnswers` comme une réponse de questionnaire supplémentaire,
+   * de façon cumulative (signal de préférence explicite persistant).
+   */
+  batchProbes?: Array<{ intro: string; answer: string | null }>;
 };
 
 /** Entrées préparées pour un appel `rankJobsWithPreferences`. */
@@ -74,6 +81,12 @@ type PreparedRefinement = {
   likedEnriched: RefinedJobInput[];
   dislikedEnriched: DislikedJobInput[];
   userContext: UserContext;
+  /**
+   * Choix d'affinage A/B répondus (swipe deck), dans un canal dédié et non
+   * dilués dans `formattedAnswers` : permet de les pondérer fortement au
+   * reranking (cf. `RankWithPreferencesInput.probeChoices`).
+   */
+  probeChoices: Array<{ question: string; answer: string }>;
 };
 
 /** Réponse de `generateNextBatch` (swipe deck — batches progressifs). */
@@ -704,6 +717,7 @@ export class QuestionnaireService {
       likedJobs: prep.likedEnriched,
       dislikedJobs: prep.dislikedEnriched,
       userContext: prep.userContext,
+      probeChoices: prep.probeChoices,
     });
     if (!result) {
       throw new ServiceUnavailableException(
@@ -750,7 +764,10 @@ export class QuestionnaireService {
    * @throws BadRequestException si non payé ou pas assez de nouvelles notes
    * @throws ServiceUnavailableException si l'IA est indisponible
    */
-  async generateNextBatch(sessionId: string): Promise<NextBatchResult> {
+  async generateNextBatch(
+    sessionId: string,
+    probeAnswer?: string,
+  ): Promise<NextBatchResult> {
     const session = await this.prisma.questionnaireSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -758,6 +775,7 @@ export class QuestionnaireService {
         answers: { include: { question: true, option: true } },
         ratings: true,
         refinedBatches: { orderBy: { batchNumber: 'asc' } },
+        batchProbes: true,
       },
     });
     if (!session) throw new NotFoundException('Session introuvable.');
@@ -794,6 +812,22 @@ export class QuestionnaireService {
       );
     }
 
+    const batchNumber = lastBatchNumber + 1;
+
+    // Réponse à la question d'affinage A/B (probe) de CE batch : on la persiste
+    // et on la reflète en mémoire pour que prepareRefinement l'injecte dans
+    // formattedAnswers AVANT le reranking. Skip silencieux si pas de probe.
+    if (probeAnswer) {
+      await this.prisma.batchProbe.updateMany({
+        where: { sessionId, batchNumber },
+        data: { answer: probeAnswer },
+      });
+      const probe = session.batchProbes.find(
+        (p) => p.batchNumber === batchNumber,
+      );
+      if (probe) probe.answer = probeAnswer;
+    }
+
     // Exclusion cumulée : passe 1 (MatchResult) + tous les batches déjà servis.
     const excludeSlugs = new Set<string>(session.matches.map((m) => m.jobSlug));
     for (const batch of existing) {
@@ -819,6 +853,7 @@ export class QuestionnaireService {
       likedJobs: prep.likedEnriched,
       dislikedJobs: prep.dislikedEnriched,
       userContext: prep.userContext,
+      probeChoices: prep.probeChoices,
     });
     if (!result) {
       throw new ServiceUnavailableException(
@@ -829,14 +864,15 @@ export class QuestionnaireService {
     const ranked = this.rankTopCandidates(prep.candidates, result.scores);
 
     // Rationales pour le batch (un seul appel IA pour les N métiers du batch).
+    // On joint les choix d'affinage aux réponses pour que les explications
+    // puissent s'appuyer sur le critère que l'utilisateur a départagé.
     const rationales = await this.ai.generateRationales({
       topJobs: ranked.map((r) => ({ slug: r.code, title: r.libelle })),
-      answers: prep.formattedAnswers,
+      answers: [...prep.formattedAnswers, ...prep.probeChoices],
       userContext: prep.userContext,
     });
 
     const detailedMatches = await this.hydrateBatch(ranked, rationales);
-    const batchNumber = lastBatchNumber + 1;
 
     // Persiste le batch : c'est à la fois le cache et l'historique d'exclusion.
     await this.prisma.refinedBatch.create({
@@ -855,6 +891,96 @@ export class QuestionnaireService {
       insight: result.insight,
       hasMore: existing.length + 1 < QuestionnaireService.MAX_REFINED_BATCHES,
     };
+  }
+
+  /**
+   * Génère (ou récupère) la question d'affinage A/B qui précède le prochain
+   * batch du swipe deck. Appelée juste avant `generateNextBatch`.
+   *
+   * - Idempotente par `batchNumber` cible : un refresh renvoie la même question
+   *   (pas de `restoreSession` à modifier).
+   * - Dégradation : renvoie `null` si l'IA ne trouve pas de tension exploitable,
+   *   si le plafond de batches est atteint, ou si l'IA est indisponible. Le
+   *   frontend enchaîne alors directement sur `generateNextBatch` (skip silencieux).
+   *
+   * @throws BadRequestException si la session n'est pas payée
+   * @throws NotFoundException si la session n'existe pas
+   */
+  async generateNextBatchProbe(
+    sessionId: string,
+  ): Promise<ProbeQuestion | null> {
+    const session = await this.prisma.questionnaireSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        matches: true,
+        answers: { include: { question: true, option: true } },
+        ratings: true,
+        refinedBatches: { orderBy: { batchNumber: 'asc' } },
+        batchProbes: true,
+      },
+    });
+    if (!session) throw new NotFoundException('Session introuvable.');
+
+    // ⚠️ DEV_BYPASS_PAYMENT=true ne doit jamais être activé en production.
+    const devBypass = process.env.DEV_BYPASS_PAYMENT === 'true';
+    if (!session.isPaid && !devBypass) {
+      throw new BadRequestException(
+        'Les batches affinés sont une fonctionnalité payante.',
+      );
+    }
+
+    const existing = session.refinedBatches;
+    // Plafond atteint → aucun batch à venir, donc pas de probe.
+    if (existing.length >= QuestionnaireService.MAX_REFINED_BATCHES) {
+      return null;
+    }
+
+    const lastBatchNumber =
+      existing[existing.length - 1]?.batchNumber ??
+      QuestionnaireService.FIRST_REFINED_BATCH - 1;
+    const batchNumber = lastBatchNumber + 1;
+
+    // Idempotence : un probe déjà généré pour ce batch est renvoyé tel quel.
+    const existingProbe = session.batchProbes.find(
+      (p) => p.batchNumber === batchNumber,
+    );
+    if (existingProbe) {
+      return {
+        intro: existingProbe.intro,
+        axisA: existingProbe.axisA,
+        axisB: existingProbe.axisB,
+      };
+    }
+
+    // Exclusion cumulée (comme generateNextBatch) pour calculer le signal.
+    const excludeSlugs = new Set<string>(session.matches.map((m) => m.jobSlug));
+    for (const batch of existing) {
+      for (const m of (batch.matches as unknown as MatchOutput[]) ?? []) {
+        if (m?.job?.slug) excludeSlugs.add(m.job.slug);
+      }
+    }
+
+    const prep = await this.prepareRefinement(session, excludeSlugs);
+    const probe = await this.ai.generateProbe({
+      likedJobs: prep.likedEnriched,
+      dislikedJobs: prep.dislikedEnriched,
+      answers: prep.formattedAnswers,
+      userContext: prep.userContext,
+    });
+    if (!probe) return null;
+
+    // Persiste dès maintenant (answer null) — réponse posée plus tard via
+    // generateNextBatch(probeAnswer). Sert aussi de cache pour l'idempotence.
+    await this.prisma.batchProbe.create({
+      data: {
+        sessionId,
+        batchNumber,
+        intro: probe.intro,
+        axisA: probe.axisA,
+        axisB: probe.axisB,
+      },
+    });
+    return probe;
   }
 
   // ─── Helpers de raffinement (partagés refine ⇄ next-batch) ────────────────
@@ -956,12 +1082,22 @@ export class QuestionnaireService {
       }
     }
 
+    // Probes A/B répondus (swipe deck) : signal de préférence explicite et
+    // récent. On les expose dans un canal dédié (probeChoices) plutôt que de les
+    // diluer dans formattedAnswers, pour pouvoir les pondérer fortement au
+    // reranking (solution A).
+    const probeChoices: Array<{ question: string; answer: string }> = [];
+    for (const p of session.batchProbes ?? []) {
+      if (p.answer) probeChoices.push({ question: p.intro, answer: p.answer });
+    }
+
     return {
       candidates,
       formattedAnswers,
       likedEnriched,
       dislikedEnriched,
       userContext,
+      probeChoices,
     };
   }
 

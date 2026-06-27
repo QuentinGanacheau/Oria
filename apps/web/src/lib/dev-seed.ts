@@ -35,8 +35,10 @@ const DEV_SESSION: Omit<StoredSession, "savedAt"> = {
   matches: [
     {
       job: {
-        slug: "charge-de-produit-digital",
-        title: "Chargé de produit digital",
+        // Slug = code ROME réel (le seed doit pointer vers un métier présent en
+        // base, sinon la fiche /metiers/[slug] renvoie 404).
+        slug: "E1104",
+        title: "Concepteur de contenus multimédia",
         tagline: "Donner vie à des produits numériques utiles",
         summary:
           "Tu travailles à l'intersection du design, de la technique et du business pour " +
@@ -62,8 +64,8 @@ const DEV_SESSION: Omit<StoredSession, "savedAt"> = {
     },
     {
       job: {
-        slug: "ux-researcher",
-        title: "UX Researcher",
+        slug: "M1402",
+        title: "Responsable en organisation en entreprise",
         tagline: "Comprendre les utilisateurs pour mieux les servir",
         summary:
           "Tu mènes des recherches qualitatives et quantitatives pour comprendre les besoins, " +
@@ -89,8 +91,8 @@ const DEV_SESSION: Omit<StoredSession, "savedAt"> = {
     },
     {
       job: {
-        slug: "consultant-transformation-digitale",
-        title: "Consultant transformation digitale",
+        slug: "M1707",
+        title: "Responsable du développement commercial",
         tagline: "Accompagner les organisations dans leur évolution numérique",
         summary:
           "Tu accompagnes des entreprises à moderniser leurs processus, adopter de nouveaux " +

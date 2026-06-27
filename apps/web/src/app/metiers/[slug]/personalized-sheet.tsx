@@ -287,8 +287,10 @@ function TabPlan({ plan }: { plan: ActionPlan }) {
               { label: "2 ans", value: plan.timeline.twoYears },
             ] as const
           ).map(({ label, value }) => (
-            <div key={label} className="flex gap-3">
-              <span className="mt-0.5 shrink-0 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
+            <div key={label} className="flex items-center gap-3.5">
+              {/* Cercle de taille fixe (size-14) — identique pour les 3 jalons,
+                  quelle que soit la longueur du label. */}
+              <span className="grid size-14 shrink-0 place-items-center rounded-full bg-accent text-center text-[11px] font-semibold leading-tight text-white">
                 {label}
               </span>
               <p className="text-sm leading-relaxed text-ink-soft">{value}</p>

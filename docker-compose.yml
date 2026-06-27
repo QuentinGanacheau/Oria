@@ -1,0 +1,19 @@
+# Postgres local pour le développement.
+# Démarrer : docker compose up -d
+# La chaîne de connexion correspondante est dans apps/api/.env (DATABASE_URL).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: findyourjob-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: findyourjob
+      POSTGRES_PASSWORD: findyourjob
+      POSTGRES_DB: findyourjob
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

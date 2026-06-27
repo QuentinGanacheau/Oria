@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AnswerNextDto } from './dto/answer-next.dto';
 import { FinishSessionDto } from './dto/finish-session.dto';
 import { GoBackDto } from './dto/go-back.dto';
+import { NextBatchDto } from './dto/next-batch.dto';
 import { RateJobDto } from './dto/rate-job.dto';
 import { RestoreSessionDto } from './dto/restore-session.dto';
 import { StartSessionDto } from './dto/start-session.dto';
@@ -82,8 +83,25 @@ export class QuestionnaireController {
    * signale au frontend qu'il n'y a plus de batch à demander.
    */
   @Post(':sessionId/next-batch')
-  nextBatch(@Param('sessionId') sessionId: string) {
-    return this.questionnaire.generateNextBatch(sessionId);
+  nextBatch(@Param('sessionId') sessionId: string, @Body() body: NextBatchDto) {
+    return this.questionnaire.generateNextBatch(sessionId, body.probeAnswer);
+  }
+
+  /**
+   * POST /v1/questionnaire/:sessionId/next-batch/probe
+   *
+   * Génère (ou récupère, idempotent) la question d'affinage A/B qui précède le
+   * prochain batch du swipe deck. Protégé (session payée). Renvoie la question
+   * `{ intro, axisA, axisB }` ou `null` si aucune tension exploitable / plafond
+   * atteint / IA indisponible — le frontend enchaîne alors directement sur
+   * `next-batch` (skip silencieux).
+   */
+  @Post(':sessionId/next-batch/probe')
+  async nextBatchProbe(@Param('sessionId') sessionId: string) {
+    // Enveloppé dans { probe } pour garantir un corps JSON non vide même quand
+    // il n'y a pas de question (le client fait res.json() sans tolérer le vide).
+    const probe = await this.questionnaire.generateNextBatchProbe(sessionId);
+    return { probe };
   }
 
   /**

@@ -35,12 +35,33 @@ const buildMetierDetails = (
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const authMock = {
-  getAccessToken: vi.fn<[], Promise<string>>(),
+  getAccessToken: vi.fn<() => Promise<string>>(),
 };
 
 const configMock = {
   apiBaseUrl: 'https://api.francetravail.io/partenaire',
+  offresSearchPath: '/offresdemploi/v2/offres/search',
 };
+
+/**
+ * Simule une réponse de l'API Offres pour countOffersByRome.
+ * `contentRange` alimente l'en-tête lu pour extraire le total.
+ */
+function mockFetchOffres(opts: {
+  status?: number;
+  ok?: boolean;
+  contentRange?: string | null;
+}): void {
+  const { status = 206, ok = true, contentRange = null } = opts;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok,
+      status,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-range' ? contentRange : null) },
+    }),
+  );
+}
 
 // ─── Utilitaire : simule une réponse fetch ────────────────────────────────────
 
@@ -306,6 +327,63 @@ describe('RomeApiService', () => {
       expect(result).toEqual(minimalDetails);
       expect(result.definition).toBeUndefined();
       expect(result.competencesMobilisees).toBeUndefined();
+    });
+  });
+
+  // ─── countOffersByRome ───────────────────────────────────────────────────────
+
+  describe('countOffersByRome', () => {
+    it('extrait le total depuis l en-tête Content-Range', async () => {
+      mockFetchOffres({ status: 206, contentRange: 'offres 0-0/3214' });
+
+      const result = await service.countOffersByRome('M1805');
+
+      expect(result).toBe(3214);
+    });
+
+    it('interroge l endpoint Offres avec codeROME et range minimal', async () => {
+      mockFetchOffres({ status: 206, contentRange: 'offres 0-0/10' });
+
+      await service.countOffersByRome('M1805');
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?codeROME=M1805&range=0-0',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer token-valide' }),
+        }),
+      );
+    });
+
+    it('retourne 0 sur une réponse 204 No Content', async () => {
+      mockFetchOffres({ status: 204, ok: true, contentRange: null });
+
+      const result = await service.countOffersByRome('M1805');
+
+      expect(result).toBe(0);
+    });
+
+    it('retourne null si l en-tête Content-Range est absent', async () => {
+      mockFetchOffres({ status: 206, contentRange: null });
+
+      const result = await service.countOffersByRome('M1805');
+
+      expect(result).toBeNull();
+    });
+
+    it('retourne null (sans lever) sur un statut d erreur', async () => {
+      mockFetchOffres({ status: 500, ok: false, contentRange: null });
+
+      const result = await service.countOffersByRome('M1805');
+
+      expect(result).toBeNull();
+    });
+
+    it('retourne null (sans lever) si fetch rejette', async () => {
+      mockFetchNetworkError('Offres indisponible');
+
+      const result = await service.countOffersByRome('M1805');
+
+      expect(result).toBeNull();
     });
   });
 

@@ -25,6 +25,10 @@ export interface StoredMatch {
     formations: string[];
     salaryRangeHint: string;
     workContext: string;
+    /** Niveau de recrutement relatif (volume d'offres France Travail). Optionnel — legacy. */
+    recruitmentLevel?: "high" | "medium" | "low" | null;
+    /** Nombre d'offres actives à la dernière sync. Optionnel — legacy. */
+    offerCount?: number | null;
   };
   score: number;
   scorePercent: number;

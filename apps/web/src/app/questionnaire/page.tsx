@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Clock, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock, Loader2, Sparkles, X } from "lucide-react";
 import { apiPost } from "@/lib/api";
 import { saveSession, type StoredPortrait } from "@/lib/storage";
 import ThemeToggle from "@/components/theme-toggle";
@@ -22,8 +22,17 @@ type Question = {
 };
 
 type Progress = { answered: number; total: number | null };
-type NextResponse = { complete: boolean; question: Question | null; progress: Progress };
-type StartResponse = { sessionId: string; complete: boolean; question: Question | null; progress: Progress };
+type NextResponse = {
+  complete: boolean;
+  question: Question | null;
+  progress: Progress;
+};
+type StartResponse = {
+  sessionId: string;
+  complete: boolean;
+  question: Question | null;
+  progress: Progress;
+};
 type MatchResponse = {
   sessionId: string;
   matches: {
@@ -65,13 +74,18 @@ export default function QuestionnairePage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
-  const [progress, setProgress] = useState<Progress>({ answered: 0, total: null });
+  const [progress, setProgress] = useState<Progress>({
+    answered: 0,
+    total: null,
+  });
   const [complete, setComplete] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   // Map optionId → label pour les chips sélectionnés (SUGGESTIONS_WITH_TEXT)
-  const [selectedSuggestions, setSelectedSuggestions] = useState<Map<string, string>>(new Map());
+  const [selectedSuggestions, setSelectedSuggestions] = useState<
+    Map<string, string>
+  >(new Map());
   // Choix en attente d'auto-avance (SINGLE_CHOICE) — donne le feedback visuel
   // de sélection ~260 ms avant de charger la question suivante.
   const [pendingChoice, setPendingChoice] = useState<string | null>(null);
@@ -90,7 +104,9 @@ export default function QuestionnairePage() {
    *   "done"     → on redirige vers /resultats
    * Permet de séquencer les deux écrans intermédiaires.
    */
-  const [postFlowStep, setPostFlowStep] = useState<"email" | "portrait" | "done">("email");
+  const [postFlowStep, setPostFlowStep] = useState<
+    "email" | "portrait" | "done"
+  >("email");
   /** Cache du flag hasEmail entre les deux écrans (capture vs skip). */
   const hasEmailRef = useRef(false);
   const finishLock = useRef(false);
@@ -118,7 +134,10 @@ export default function QuestionnairePage() {
       setError(null);
       const questionAtSubmit = currentQuestionRef.current;
       try {
-        const data = await apiPost<NextResponse>("/v1/questionnaire/next", payload);
+        const data = await apiPost<NextResponse>(
+          "/v1/questionnaire/next",
+          payload,
+        );
         const nextAnswers = { ...answers, [payload.questionKey]: humanValue };
         setAnswers(nextAnswers);
         if (questionAtSubmit) {
@@ -138,9 +157,12 @@ export default function QuestionnairePage() {
           if (finishLock.current) return;
           finishLock.current = true;
           try {
-            const matchData = await apiPost<MatchResponse>("/v1/questionnaire/match", {
-              sessionId: payload.sessionId,
-            });
+            const matchData = await apiPost<MatchResponse>(
+              "/v1/questionnaire/match",
+              {
+                sessionId: payload.sessionId,
+              },
+            );
             // On ne redirige plus directement : on affiche l'écran de capture
             // email entre le match et l'arrivée sur /resultats.
             setPendingMatch(matchData);
@@ -177,7 +199,9 @@ export default function QuestionnairePage() {
       // Si la question courante a déjà été répondue (retour multiple),
       // supprimer sa réponse en DB ainsi que toutes les suivantes.
       if (answers[currentKey] !== undefined) {
-        await apiPost(`/v1/questionnaire/${sessionId}/back`, { questionKey: currentKey });
+        await apiPost(`/v1/questionnaire/${sessionId}/back`, {
+          questionKey: currentKey,
+        });
         setAnswers((prev) => {
           const next = { ...prev };
           delete next[currentKey];
@@ -189,7 +213,10 @@ export default function QuestionnairePage() {
       setQuestion(prevEntry.question);
       setDraft(prevEntry.prefilledDraft);
       setSelectedSuggestions(prevEntry.prefilledSuggestions);
-      setProgress((p) => ({ answered: Math.max(0, p.answered - 1), total: p.total }));
+      setProgress((p) => ({
+        answered: Math.max(0, p.answered - 1),
+        total: p.total,
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur réseau");
     } finally {
@@ -202,9 +229,12 @@ export default function QuestionnairePage() {
     setLoading(true);
     setError(null);
     try {
-      const matchData = await apiPost<MatchResponse>("/v1/questionnaire/match", {
-        sessionId: aiError,
-      });
+      const matchData = await apiPost<MatchResponse>(
+        "/v1/questionnaire/match",
+        {
+          sessionId: aiError,
+        },
+      );
       // Même flow que la complétion normale : on passe par l'EmailGate.
       setAiError(null);
       setPendingMatch(matchData);
@@ -275,7 +305,7 @@ export default function QuestionnairePage() {
     setHistory([]);
     setSessionId(null);
     setProgress({ answered: 0, total: null });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (started.current) return;
@@ -363,7 +393,8 @@ export default function QuestionnairePage() {
   // Avant que la situation soit connue (Q1), total est null → pas de %.
   const { answered, total } = progress;
   const currentNum = answered + 1;
-  const progressPct = total !== null ? Math.round((answered / total) * 100) : null;
+  const progressPct =
+    total !== null ? Math.round((answered / total) * 100) : null;
 
   const showChrome = (question || complete) && !pendingMatch;
 
@@ -387,11 +418,13 @@ export default function QuestionnairePage() {
                     "Terminé"
                   ) : total !== null ? (
                     <>
-                      <b className="font-semibold text-ink">{currentNum}</b> / {total}
+                      <b className="font-semibold text-ink">{currentNum}</b> /{" "}
+                      {total}
                     </>
                   ) : (
                     <>
-                      Question <b className="font-semibold text-ink">{currentNum}</b>
+                      Question{" "}
+                      <b className="font-semibold text-ink">{currentNum}</b>
                     </>
                   )}
                 </span>
@@ -410,7 +443,11 @@ export default function QuestionnairePage() {
               />
             </div>
             <div className="mt-2 flex justify-end text-[13px] text-muted">
-              {complete ? "Terminé" : progressPct !== null ? `${progressPct}% complété` : ""}
+              {complete
+                ? "Terminé"
+                : progressPct !== null
+                  ? `${progressPct}% complété`
+                  : ""}
             </div>
           </div>
         )}
@@ -418,16 +455,20 @@ export default function QuestionnairePage() {
 
       {/* Lien Précédent */}
       <div className="mx-auto mt-4 min-h-6 w-full max-w-[760px] px-6">
-        {question && !complete && history.length > 0 && !pendingMatch && !aiError && (
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void goBack()}
-            className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-accent-ink disabled:opacity-40"
-          >
-            <ArrowLeft className="size-4" /> Précédent
-          </button>
-        )}
+        {question &&
+          !complete &&
+          history.length > 0 &&
+          !pendingMatch &&
+          !aiError && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void goBack()}
+              className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-accent-ink disabled:opacity-40"
+            >
+              <ArrowLeft className="size-4" /> Précédent
+            </button>
+          )}
       </div>
 
       {/* ── Scène ────────────────────────────────────────────────────────── */}
@@ -440,7 +481,9 @@ export default function QuestionnairePage() {
           )}
 
           {loading && !question && !complete && !aiError && (
-            <p className="text-center text-muted">Chargement du questionnaire…</p>
+            <p className="text-center text-muted">
+              Chargement du questionnaire…
+            </p>
           )}
 
           {/* Erreur IA : calcul des résultats impossible — propose de réessayer */}
@@ -454,8 +497,9 @@ export default function QuestionnairePage() {
               </h2>
               <p className="mt-2 text-sm text-ink-soft">
                 Tes réponses sont bien enregistrées. Le calcul de tes résultats
-                nécessite notre IA, qui est temporairement indisponible. Réessaie
-                dans quelques minutes — pas besoin de refaire le questionnaire.
+                nécessite notre IA, qui est temporairement indisponible.
+                Réessaie dans quelques minutes — pas besoin de refaire le
+                questionnaire.
               </p>
               <button
                 type="button"
@@ -466,6 +510,33 @@ export default function QuestionnairePage() {
                 {loading ? "Calcul en cours…" : "Réessayer"}
                 <ArrowRight className="size-4" />
               </button>
+            </div>
+          )}
+
+          {/* Génération des résultats : le questionnaire est fini (complete),
+              le POST /match tourne (matching IA + portrait, quelques secondes)
+              mais pendingMatch n'est pas encore arrivé. Sans cet écran,
+              l'utilisateur reste sur une page vide pendant le calcul. */}
+          {complete && !pendingMatch && !aiError && (
+            <div className="rounded-3xl border border-line bg-surface p-8 text-center shadow-[0_30px_60px_-38px_rgba(20,40,25,.28)] sm:p-12">
+              <div className="relative mx-auto grid size-16 place-items-center">
+                {/* Halo qui pulse derrière l'icône — signal "ça travaille". */}
+                <span className="absolute inset-0 animate-ping rounded-full bg-accent/20" />
+                <span className="relative grid size-16 place-items-center rounded-full bg-accent-soft">
+                  <Sparkles className="size-8 text-accent-ink" strokeWidth={1.8} />
+                </span>
+              </div>
+              <h2 className="mt-6 font-serif text-2xl text-ink">
+                On analyse tes réponses…
+              </h2>
+              <p className="mx-auto mt-2 max-w-[42ch] text-sm text-ink-soft">
+                Notre IA construit ton portrait et sélectionne les métiers qui
+                te correspondent le mieux. Encore quelques secondes.
+              </p>
+              <div className="mt-5 inline-flex items-center gap-2 text-sm text-muted">
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                Génération en cours
+              </div>
             </div>
           )}
 
@@ -514,7 +585,9 @@ export default function QuestionnairePage() {
                               key={opt.id}
                               type="button"
                               disabled={loading}
-                              onClick={() => toggleSuggestion(opt.id, opt.label)}
+                              onClick={() =>
+                                toggleSuggestion(opt.id, opt.label)
+                              }
                               className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-[15px] transition disabled:opacity-50 ${
                                 selected
                                   ? "border-accent bg-accent text-white"
@@ -522,7 +595,9 @@ export default function QuestionnairePage() {
                               }`}
                             >
                               {opt.label}
-                              {selected && <X className="size-[15px]" strokeWidth={2.2} />}
+                              {selected && (
+                                <X className="size-[15px]" strokeWidth={2.2} />
+                              )}
                             </button>
                           );
                         })}
@@ -530,7 +605,9 @@ export default function QuestionnairePage() {
                       <textarea
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        placeholder={question.placeholder ?? "Précise si tu veux…"}
+                        placeholder={
+                          question.placeholder ?? "Précise si tu veux…"
+                        }
                         rows={4}
                         maxLength={2000}
                         disabled={loading}
@@ -539,7 +616,11 @@ export default function QuestionnairePage() {
                       <div className="flex items-center justify-end">
                         <button
                           type="button"
-                          disabled={loading || (selectedSuggestions.size === 0 && draft.trim().length === 0)}
+                          disabled={
+                            loading ||
+                            (selectedSuggestions.size === 0 &&
+                              draft.trim().length === 0)
+                          }
                           onClick={onSubmitSuggestions}
                           className="group inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-[15px] font-semibold text-paper transition hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-surface disabled:hover:bg-line-strong"
                         >
@@ -560,7 +641,9 @@ export default function QuestionnairePage() {
                         className="w-full resize-y rounded-2xl border-[1.5px] border-line bg-surface-2 px-[18px] py-4 text-base leading-relaxed outline-none transition focus:border-accent focus:bg-surface disabled:opacity-50"
                       />
                       <div className="flex items-center justify-between text-[13px] text-muted">
-                        <span className="tabular-nums">{draft.length} / 2000</span>
+                        <span className="tabular-nums">
+                          {draft.length} / 2000
+                        </span>
                         <button
                           type="button"
                           disabled={loading || draft.trim().length < 3}
@@ -590,7 +673,9 @@ export default function QuestionnairePage() {
                           >
                             <span
                               className={`grid size-6 flex-none place-items-center rounded-full border-2 transition ${
-                                selected ? "border-accent bg-accent" : "border-line-strong"
+                                selected
+                                  ? "border-accent bg-accent"
+                                  : "border-line-strong"
                               }`}
                             >
                               <Check
@@ -610,7 +695,9 @@ export default function QuestionnairePage() {
           )}
 
           {loading && question && !pendingMatch && (
-            <p className="mt-4 text-center text-sm text-muted">Enregistrement…</p>
+            <p className="mt-4 text-center text-sm text-muted">
+              Enregistrement…
+            </p>
           )}
         </div>
       </div>

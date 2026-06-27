@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, ClipboardList, GraduationCap, Lock, User } from "lucide-react";
+import { ArrowRight, ClipboardList, GraduationCap, Lock, Sparkles, User } from "lucide-react";
 import { isUnlocked } from "@/lib/storage";
 import PersonalizedSheetSection from "./personalized-sheet";
 
@@ -16,6 +16,8 @@ type Job = {
   formations: string[];
   salaryRangeHint: string;
   workContext: string;
+  recruitmentLevel: "high" | "medium" | "low" | null;
+  offerCount: number | null;
 };
 
 type TabId = "analyse" | "metier";
@@ -59,8 +61,8 @@ function StaticJobContent({
                   key={m}
                   className="flex items-start gap-3 rounded-[14px] border border-line bg-surface p-4 text-[15px] text-ink-soft"
                 >
-                  <span className="mt-px grid size-6 flex-none place-items-center rounded-[7px] bg-accent-soft font-serif text-[15px] text-accent-ink">
-                    ·
+                  <span className="mt-0.5 grid size-[22px] flex-none place-items-center rounded-[7px] bg-accent-soft">
+                    <span className="size-1.5 rounded-full bg-accent" />
                   </span>
                   {m}
                 </li>
@@ -89,14 +91,15 @@ function StaticJobContent({
         <div className="rounded-[18px] border border-line bg-surface p-[22px]">
           {job.skills.length > 0 && (
             <>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-accent-ink">
+                <Sparkles className="size-3.5" strokeWidth={1.9} />
                 Compétences clés
               </h3>
               <div className="mt-3.5 flex flex-wrap gap-2">
                 {job.skills.map((s) => (
                   <span
                     key={s}
-                    className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-[13px] text-ink-soft"
+                    className="rounded-lg border border-accent/25 bg-accent-soft px-3 py-1.5 text-[13px] font-medium leading-snug text-accent-ink [overflow-wrap:anywhere]"
                   >
                     {s}
                   </span>

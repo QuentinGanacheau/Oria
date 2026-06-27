@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   MOCK_FOLLOW_UP_QUESTIONS,
+  MOCK_PROBE,
   MOCK_PERSONALIZED_SHEET,
   MOCK_PORTRAITS,
   MOCK_RANK_WITH_PREFERENCES,
@@ -152,6 +153,13 @@ export type RankWithPreferencesInput = {
   likedJobs: RefinedJobInput[];
   dislikedJobs: DislikedJobInput[];
   userContext: UserContext;
+  /**
+   * Choix d'affinage A/B (probes du swipe deck) : critère que l'utilisateur a
+   * explicitement départagé pour orienter ses prochains résultats. Traité comme
+   * un signal DÉCISIF, pondéré plus fortement que les réponses générales du
+   * questionnaire (sinon il se diluerait et n'aurait quasi aucun effet).
+   */
+  probeChoices?: Array<{ question: string; answer: string }>;
 };
 
 export type RankWithPreferencesResult = {
@@ -162,6 +170,20 @@ export type RankWithPreferencesResult = {
    * Ex: "Tu apprécies les métiers qui combinent création et impact concret."
    */
   insight: string;
+};
+
+/**
+ * Question A/B d'affinage générée entre deux batches du swipe deck.
+ * L'utilisateur tape l'un des deux axes ; le label choisi devient un signal
+ * de préférence explicite pour re-prioriser le batch suivant.
+ */
+export type ProbeQuestion = {
+  /** La question / phrase d'intro (tutoiement, courte). */
+  intro: string;
+  /** Premier axe (ex: "le contact humain"). */
+  axisA: string;
+  /** Second axe, en opposition (ex: "l'impact concret"). */
+  axisB: string;
 };
 
 /**
@@ -747,6 +769,81 @@ export class AiService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
+  /**
+   * Génère une question d'affinage A/B à partir du contraste like/dislike des
+   * swipes (swipe deck — entre deux batches). Renvoie deux axes opposés que
+   * l'utilisateur départage d'un tap.
+   *
+   * Posture volontairement GÉNÉREUSE (contrairement à `generateFollowUp`) :
+   * on dispose ici du contraste likés/dislikés, donc un axe pertinent existe
+   * presque toujours. On ne retourne `null` que si les swipes sont trop peu
+   * nombreux ou trop homogènes pour opposer quoi que ce soit.
+   *
+   * Température 0.5 : un peu de variété sans partir dans l'invention.
+   */
+  async generateProbe(input: {
+    likedJobs: RefinedJobInput[];
+    dislikedJobs: DislikedJobInput[];
+    answers: Array<{ question: string; answer: string }>;
+    userContext: UserContext;
+  }): Promise<ProbeQuestion | null> {
+    if (this.mockMode) {
+      return MOCK_PROBE;
+    }
+    if (!this.provider) return null;
+    // Sans contraste exploitable, aucune tension à départager.
+    if (input.likedJobs.length === 0 && input.dislikedJobs.length === 0) {
+      return null;
+    }
+
+    const likedBlock =
+      input.likedJobs.length > 0
+        ? input.likedJobs.map((j) => `  ✅ ${j.libelle}`).join('\n')
+        : '  (aucun)';
+    const dislikedBlock =
+      input.dislikedJobs.length > 0
+        ? input.dislikedJobs.map((j) => `  ❌ ${j.libelle}`).join('\n')
+        : '  (aucun)';
+
+    const prompt = [
+      "Tu es un conseiller d'orientation. L'utilisateur a aimé certains métiers",
+      "et en a rejeté d'autres. Tu vas poser UNE question pour comprendre ce qui",
+      'motive vraiment ses choix, afin de mieux cibler les prochaines suggestions.',
+      '',
+      'Métiers aimés :',
+      likedBlock,
+      'Métiers rejetés :',
+      dislikedBlock,
+      '',
+      'Formule une question A/B : deux axes OPPOSÉS et concrets qui pourraient',
+      'expliquer ses préférences (ex: "le contact humain" vs "le travail concret",',
+      '"la créativité" vs "la rigueur technique", "aider" vs "organiser").',
+      'Les deux axes doivent être plausibles au vu de ses choix et vraiment',
+      'distincts. Sois généreux : un bon axe existe presque toujours.',
+      '',
+      'Ne retourne null que si les métiers sont trop homogènes ou trop peu',
+      "nombreux pour opposer quoi que ce soit d'utile.",
+      '',
+      'Format JSON STRICT :',
+      '{"intro":"Ta question (max 14 mots, tutoiement)","axisA":"axe 1 (max 5 mots)","axisB":"axe 2 (max 5 mots)"}',
+      'ou {"probe":null}',
+      "Retourne UNIQUEMENT ce JSON, rien d'autre.",
+    ].join('\n');
+
+    const parsed = await this.askJson<{
+      intro?: string;
+      axisA?: string;
+      axisB?: string;
+      probe?: null;
+    }>(prompt, 0.5);
+    if (!parsed) return null;
+    const intro = parsed.intro?.trim();
+    const axisA = parsed.axisA?.trim();
+    const axisB = parsed.axisB?.trim();
+    if (!intro || !axisA || !axisB) return null;
+    return { intro, axisA, axisB };
+  }
+
   async rankJobsWithPreferences(
     input: RankWithPreferencesInput,
   ): Promise<RankWithPreferencesResult | null> {
@@ -778,6 +875,13 @@ export class AiService {
       .map((c) => `${c.code}: ${c.libelle}`)
       .join('\n');
 
+    // Bloc emphatisé pour les choix d'affinage A/B : ils doivent peser plus que
+    // les réponses générales (solution A — sinon le signal se dilue).
+    const probeBlock =
+      input.probeChoices && input.probeChoices.length > 0
+        ? input.probeChoices.map((p) => `  → ${p.answer}`).join('\n')
+        : null;
+
     const trackInstruction = TRACK_INSTRUCTIONS[input.userContext.track];
 
     const prompt = [
@@ -792,6 +896,17 @@ export class AiService {
       likedBlock,
       "Métiers rejetés :",
       dislikedBlock,
+      ...(probeBlock
+        ? [
+            '',
+            "⚠️ CRITÈRE DÉCISIF — l'utilisateur vient de préciser explicitement ce",
+            'qui compte le plus pour lui :',
+            probeBlock,
+            'Ce critère est PRIORITAIRE : il doit peser nettement plus que les',
+            'réponses générales du questionnaire. Remonte franchement les métiers',
+            'qui le respectent, fais descendre ceux qui le contredisent.',
+          ]
+        : []),
       '',
       'Voici de nouveaux candidats à reranker (format "code: libellé") :',
       candidatesBlock,

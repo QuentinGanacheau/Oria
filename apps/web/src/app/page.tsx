@@ -1,15 +1,16 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   Brain,
   Check,
   ChevronDown,
   ClipboardCheck,
-  Lock,
+  Heart,
+  Layers,
   PenLine,
   Target,
   User,
+  X,
 } from "lucide-react";
 import ThemeToggle from "@/components/theme-toggle";
 
@@ -39,23 +40,23 @@ const STEPS = [
   },
   {
     number: "02",
-    title: "L'IA analyse ton profil",
-    body: "Tes réponses sont croisées avec 20 métiers. L'intelligence artificielle identifie ce qui te correspond vraiment — pas juste les mots-clés.",
+    title: "L'IA dresse ton portrait",
+    body: "L'IA fait d'abord ton portrait — tes forces, ce qui t'anime — puis croise tes réponses avec le répertoire officiel des métiers pour repérer ce qui te correspond vraiment, pas juste les mots-clés.",
     Icon: Brain,
   },
   {
     number: "03",
-    title: "Tu découvres tes pistes",
-    body: "Un classement personnalisé avec pour chaque métier : ton score d'adéquation et l'explication précise qui justifie le match.",
-    Icon: BarChart3,
+    title: "Tu explores tes pistes",
+    body: "Tu découvres tes métiers carte par carte, comme un deck à swiper. Tu gardes ce qui te parle, tu écartes le reste — et l'IA affine les suivants à partir de tes choix.",
+    Icon: Layers,
   },
 ];
 
 const DIFFERENTIATORS = [
   {
     Icon: Target,
-    title: "Un classement, pas une liste",
-    body: "Chaque métier a un score calculé à partir de tes réponses. Tu sais pourquoi il est en #1 — pas juste qu'il y est.",
+    title: "Tu swipes, l'IA affine",
+    body: "Chaque carte a un score calculé à partir de tes réponses. À chaque paquet, l'IA tient compte de ce que tu as gardé ou écarté pour proposer des métiers de plus en plus justes — même ceux que tu n'aurais jamais cherchés.",
   },
   {
     Icon: Brain,
@@ -70,7 +71,7 @@ const DIFFERENTIATORS = [
   {
     Icon: ClipboardCheck,
     title: "Des fiches vraiment personnalisées",
-    body: "La fiche de ton #1 résultat est rédigée pour toi : ce qui va te plaire, les points de vigilance, et 3 étapes concrètes à faire maintenant.",
+    body: "Chaque métier que tu débloques a une fiche rédigée pour toi : ce qui va te plaire, les points de vigilance, un plan d'action concret et une journée type.",
   },
 ];
 
@@ -82,7 +83,7 @@ const TESTIMONIALS = [
     initials: "CR",
   },
   {
-    quote: "En reconversion après 8 ans dans la finance. Le classement m'a confirmé ce que je ressentais — et m'a donné les mots pour en parler.",
+    quote: "En reconversion après 8 ans dans la finance. Les pistes proposées m'ont confirmé ce que je ressentais — et m'ont donné les mots pour en parler.",
     name: "Thomas M.",
     role: "35 ans, en reconversion",
     initials: "TM",
@@ -102,7 +103,7 @@ const FAQS = [
   },
   {
     q: "C'est vraiment gratuit ?",
-    a: "Oui. Les 3 premiers résultats de ton classement sont gratuits, sans inscription. Le rapport complet (tous les métiers + fiches personnalisées) est disponible en paiement unique.",
+    a: "Oui. Ton portrait et tes 3 premières pistes sont gratuits, sans inscription. Pour continuer à explorer — de nouveaux métiers affinés par l'IA et les fiches personnalisées — un paiement unique de 5,90 €.",
   },
   {
     q: "Pour qui c'est fait ?",
@@ -113,15 +114,9 @@ const FAQS = [
     a: "Tes réponses sont liées à ta session de navigation, pas à un compte. Rien n'est vendu ni partagé. Les résultats sont stockés localement sur ton appareil.",
   },
   {
-    q: "Le rapport complet, c'est quoi exactement ?",
-    a: "L'accès à l'intégralité de ton classement + pour chaque métier une fiche personnalisée : ce qui va te plaire dans ce métier selon ton profil, les points de vigilance, 3 étapes concrètes adaptées à ta situation, et une journée type.",
+    q: "Qu'est-ce que je débloque en payant ?",
+    a: "Tu continues à explorer : l'IA te propose de nouveaux paquets de métiers, affinés à chaque fois selon ce que tu as gardé ou écarté. Chaque métier débloqué a sa fiche personnalisée : ce qui va te plaire selon ton profil, les points de vigilance, un plan d'action concret et une journée type.",
   },
-];
-
-const MOCK_JOBS = [
-  { rank: "1", title: "UX / Product Designer", sub: "Conception, créativité, impact concret", score: 94 },
-  { rank: "2", title: "Chef·fe de projet digital", sub: "Coordination, autonomie, équipe", score: 89 },
-  { rank: "3", title: "Data Analyst", sub: "Logique, analyse, résolution", score: 86 },
 ];
 
 // ─── Primitives ─────────────────────────────────────────────────────────────
@@ -185,8 +180,9 @@ export default function Home() {
               </h1>
               <p className="mt-6 max-w-[30em] text-[19px] leading-relaxed text-ink-soft">
                 Un questionnaire intelligent analyse tes valeurs, ta personnalité et
-                tes ambitions. En quelques minutes, tu obtiens un classement
-                personnalisé — avec l'explication précise qui justifie chaque résultat.
+                tes ambitions. En quelques minutes, tu obtiens ton portrait et des
+                pistes métiers à explorer une à une — chacune avec l'explication
+                précise qui justifie le match.
               </p>
               <div className="mt-8 flex flex-wrap gap-3.5">
                 <Link
@@ -204,7 +200,7 @@ export default function Home() {
                 </a>
               </div>
               <div className="mt-6 flex flex-wrap gap-5 text-sm text-muted">
-                {["Gratuit", "Sans inscription", "3 résultats offerts"].map((t) => (
+                {["Gratuit", "Sans inscription", "3 pistes offertes"].map((t) => (
                   <span key={t} className="inline-flex items-center gap-2">
                     <Check className="size-4 text-ok" strokeWidth={2.2} />
                     {t}
@@ -213,56 +209,46 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Mockup de classement */}
-            <div className="overflow-hidden rounded-[22px] border border-line-strong bg-surface shadow-[0_30px_60px_-30px_rgba(40,30,15,.35)] [transform:rotate(.4deg)]">
-              <div className="flex items-center justify-between border-b border-line bg-surface-2 px-5 py-4">
-                <span className="text-[13px] font-semibold uppercase tracking-wide text-muted">
-                  Ton classement
-                </span>
-                <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink">
-                  Personnalisé
-                </span>
-              </div>
-              <div className="px-4 pb-4 pt-3.5">
-                {MOCK_JOBS.map((job, i) => (
-                  <div
-                    key={job.rank}
-                    className={`flex items-center gap-3.5 rounded-[14px] border px-3.5 py-3.5 ${
-                      i === 0
-                        ? "border-accent/25 bg-accent-soft"
-                        : "border-transparent"
-                    } ${i > 0 ? "mt-1" : ""}`}
-                  >
-                    <div
-                      className={`w-[34px] flex-none text-center font-serif text-[30px] ${
-                        i === 0 ? "text-accent" : "text-line-strong"
-                      }`}
-                    >
-                      {job.rank}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[15px] font-semibold tracking-tight">{job.title}</div>
-                      <div className="mt-0.5 text-[12.5px] text-muted">{job.sub}</div>
-                    </div>
-                    <div className="flex-none text-right">
-                      <div className={`font-serif text-[26px] leading-none ${i === 0 ? "" : "text-ink-soft"}`}>
-                        {job.score}
-                        <span className="text-[14px]">%</span>
-                      </div>
-                      <div className="mt-1.5 h-[5px] w-[76px] overflow-hidden rounded-full bg-line">
-                        <i
-                          className={`block h-full rounded-full ${i === 0 ? "bg-accent" : "bg-line-strong"}`}
-                          style={{ width: `${job.score}%` }}
-                        />
-                      </div>
-                    </div>
+            {/* Mockup carte à swiper */}
+            <div className="relative [transform:rotate(.5deg)]">
+              {/* cartes empilées en arrière-plan, pour suggérer le deck */}
+              <div className="absolute inset-x-4 -bottom-3 top-3 rounded-[22px] border border-line bg-surface-2/60" />
+              <div className="absolute inset-x-2 -bottom-1.5 top-1.5 rounded-[22px] border border-line bg-surface-2" />
+
+              <div className="relative overflow-hidden rounded-[22px] border border-line-strong bg-surface shadow-[0_30px_60px_-30px_rgba(40,30,15,.35)]">
+                <div className="flex items-center justify-between bg-gradient-to-r from-accent-ink to-accent px-5 py-4 text-white">
+                  <span className="text-[13px] font-semibold tracking-wide opacity-90">Piste #1</span>
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur-sm">
+                    94% d&apos;adéquation
+                  </span>
+                </div>
+                <div className="px-6 pb-6 pt-5">
+                  <h3 className="font-serif text-[26px] leading-tight tracking-tight">
+                    UX / Product Designer
+                  </h3>
+                  <p className="mt-1.5 text-[15px] text-ink-soft">
+                    Conception, créativité, impact concret
+                  </p>
+                  <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-ink">
+                    Pourquoi ce métier te correspond
+                  </p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
+                    Tu as cité l&apos;envie de créer des choses utiles et d&apos;en voir
+                    l&apos;effet concret — ce métier place exactement ça au centre.
+                  </p>
+                  <div className="mt-6 flex items-center justify-center gap-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-no/40 px-4 py-2 text-sm font-semibold text-no">
+                      <X className="size-4" strokeWidth={2.4} /> Passe
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-ok/40 bg-accent-soft px-4 py-2 text-sm font-semibold text-accent-ink">
+                      <Heart className="size-4" strokeWidth={2.2} /> J&apos;aime
+                    </span>
                   </div>
-                ))}
+                </div>
               </div>
-              <div className="flex items-center gap-2.5 border-t border-dashed border-line-strong bg-surface-2 px-4 py-3 text-[13px] text-muted">
-                <Lock className="size-[15px]" strokeWidth={1.7} />
-                + 17 métiers dans ton rapport complet
-              </div>
+              <p className="mt-5 text-center text-[13px] text-muted">
+                Swipe pour garder ou écarter — l&apos;IA affine les suivants.
+              </p>
             </div>
           </div>
         </section>
@@ -271,9 +257,9 @@ export default function Home() {
         <section className="border-y border-line bg-surface-2">
           <div className="mx-auto flex max-w-[1180px] flex-wrap px-6 py-6">
             {[
-              { value: "20", label: "métiers analysés" },
+              { value: "1 500+", label: "métiers passés au crible" },
               { value: "5 min", label: "en moyenne" },
-              { value: "3", label: "résultats gratuits" },
+              { value: "3", label: "pistes gratuites" },
               { value: "IA", label: "personnalisation poussée" },
             ].map((stat, i) => (
               <div
@@ -443,8 +429,8 @@ export default function Home() {
               <ul className="my-7 flex flex-col gap-3.5 text-[15px]">
                 {[
                   "Questionnaire complet & adaptatif",
-                  "Tes 3 premiers résultats",
-                  "Explication IA pour chaque résultat",
+                  "Ton portrait IA personnalisé",
+                  "Tes 3 premières pistes à swiper",
                   "Fiche personnalisée pour ton #1",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-3">
@@ -468,7 +454,7 @@ export default function Home() {
               </span>
               <p className="text-[13px] uppercase tracking-[0.14em] text-accent">Rapport complet</p>
               <p className="mt-3.5 flex items-baseline gap-2.5 font-serif text-[58px] leading-none">
-                9,90 €
+                5,90 €
                 <small className="font-sans text-[15px] font-medium text-on-panel/60">
                   paiement unique
                 </small>
@@ -477,10 +463,10 @@ export default function Home() {
               <ul className="my-7 flex flex-col gap-3.5 text-[15px]">
                 {[
                   "Tout ce qui est inclus dans le gratuit",
-                  "Classement complet (tous les métiers)",
-                  "Fiche personnalisée pour chaque métier",
-                  "Points forts, vigilance & étapes concrètes",
-                  "Journée type adaptée à ton profil",
+                  "De nouveaux métiers affinés par l'IA à chaque paquet",
+                  "Explication personnalisée sur chaque carte",
+                  "Fiche personnalisée pour chaque métier débloqué",
+                  "Plan d'action concret : formations, étapes & journée type",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-3">
                     <Check className="mt-0.5 size-[18px] flex-none text-accent" strokeWidth={2} />
@@ -534,7 +520,7 @@ export default function Home() {
             Prêt à trouver ta voie ?
           </h2>
           <p className="mt-4 text-[18px] text-ink-soft">
-            5 minutes. Sans inscription. Tes 3 premiers résultats sont gratuits.
+            5 minutes. Sans inscription. Tes 3 premières pistes sont gratuites.
           </p>
           <Link
             href="/questionnaire"

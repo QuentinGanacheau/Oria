@@ -28,6 +28,23 @@ const SWIPE_THRESHOLD = 100;
 /** Vitesse de "flick" qui valide un swipe même sans atteindre le seuil. */
 const VELOCITY_THRESHOLD = 600;
 
+/**
+ * Infobulle au survol d'un bouton de contrôle. Pure CSS (group-hover) — pas de
+ * lib tierce. `pointer-events-none` pour ne pas gêner le clic du bouton.
+ */
+function ControlTip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-medium text-paper opacity-0 shadow-[0_8px_20px_-8px_rgba(20,40,25,.5)] transition-opacity duration-150 group-hover:opacity-100"
+    >
+      {children}
+      {/* Petite flèche sous la bulle */}
+      <span className="absolute left-1/2 top-full size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-ink" />
+    </span>
+  );
+}
+
 export default function SwipeDeck({
   cards,
   onSwipe,
@@ -45,6 +62,15 @@ export default function SwipeDeck({
   // Position de la carte du dessus, pilotée par le drag.
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+
+  // Distingue un tap (ouvre la fiche) d'un swipe (note la carte).
+  // Remis à false au pointerdown, passé à true dès que le geste dépasse
+  // ~6px — on ne déclenche l'ouverture de fiche que si on n'a pas dragué.
+  const draggedRef = useRef(false);
+
+  // File d'actions reçues pendant une animation (clics/swipes rapides) —
+  // rejouées séquentiellement par commit pour ne perdre aucune note.
+  const queueRef = useRef<SwipeDirection[]>([]);
 
   // Valeurs dérivées de x : rotation de la carte + opacité des overlays.
   const rotate = useTransform(x, [-250, 0, 250], [-16, 0, 16]);
@@ -71,17 +97,30 @@ export default function SwipeDeck({
     const next = index + 1;
     setIndex(next);
     setAnimating(false);
-    if (next >= cards.length) onEmpty?.();
+    if (next >= cards.length) {
+      // Plus de cartes : on jette les actions encore en file (rien à noter).
+      queueRef.current = [];
+      onEmpty?.();
+      return;
+    }
+    // Rejoue la prochaine action mise en file pendant l'animation. Sans ça,
+    // les clics/swipes rapides reçus pendant l'animation étaient ignorés →
+    // le compteur et les notes sous-comptaient. requestAnimationFrame laisse
+    // React ré-rendre (index/animating à jour) avant de relancer, via
+    // runFlyRef pour pointer la dernière closure (bon index/cards).
+    const queued = queueRef.current.shift();
+    if (queued !== undefined) {
+      requestAnimationFrame(() => runFlyRef.current(queued));
+    }
   };
 
-  /** Anime la carte hors de l'écran puis valide le swipe. */
-  const fly = (direction: SwipeDirection) => {
-    if (animating) return;
+  /** Lance réellement l'animation de sortie puis valide (sans garde animating). */
+  const runFly = (direction: SwipeDirection) => {
     setAnimating(true);
     if (direction === "neutral") {
       const height = typeof window !== "undefined" ? window.innerHeight : 800;
       animate(y, -height, {
-        duration: 0.45,
+        duration: 0.35,
         ease: "easeIn",
         onComplete: () => commit("neutral"),
       });
@@ -92,17 +131,33 @@ export default function SwipeDeck({
     // Sortie en easeIn (départ lent → accélération) : la carte reste un instant
     // au centre, le temps de lire le tampon J'aime/Passe, avant de filer hors écran.
     animate(x, target, {
-      duration: 0.7,
+      duration: 0.5,
       ease: "easeIn",
       onComplete: () => commit(direction),
     });
   };
 
+  /**
+   * Demande un swipe. Si une animation est déjà en cours, l'action est mise
+   * en file (rejouée par commit) au lieu d'être perdue.
+   */
+  const fly = (direction: SwipeDirection) => {
+    if (animating) {
+      queueRef.current.push(direction);
+      return;
+    }
+    runFly(direction);
+  };
+
   // Raccourcis clavier : ← passe, → j'aime, Backspace = je ne sais pas (passer).
   // (Pas d'undo dans le modèle produit : les notes sont commit côté serveur au
   // swipe ; Backspace mappe donc l'action neutre la plus proche.)
+  // Refs vers les dernières closures (index/cards à jour) pour les appels
+  // différés : raccourcis clavier + relance depuis la file.
   const flyRef = useRef(fly);
   flyRef.current = fly;
+  const runFlyRef = useRef(runFly);
+  runFlyRef.current = runFly;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") flyRef.current("dislike");
@@ -161,13 +216,28 @@ export default function SwipeDeck({
             return (
               <motion.div
                 key={card.slug}
-                className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                className="absolute inset-0 cursor-pointer active:cursor-grabbing"
                 style={{ x, y, rotate, zIndex: 20, touchAction: "pan-y" }}
                 drag
                 dragSnapToOrigin
                 dragElastic={0.6}
                 dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                onPointerDown={() => {
+                  draggedRef.current = false;
+                }}
+                onDrag={(_e, info) => {
+                  if (
+                    Math.abs(info.offset.x) > 6 ||
+                    Math.abs(info.offset.y) > 6
+                  ) {
+                    draggedRef.current = true;
+                  }
+                }}
                 onDragEnd={handleDragEnd}
+                onClick={() => {
+                  // Un vrai swipe a mis draggedRef à true → on n'ouvre pas.
+                  if (!draggedRef.current) onOpenSheet?.(card.slug);
+                }}
               >
                 <SwipeCard
                   data={card}
@@ -205,30 +275,39 @@ export default function SwipeDeck({
 
       {/* Contrôles : Passe / Je ne sais pas / J'aime (= mêmes actions que le drag) */}
       <div className="flex items-center justify-center gap-[22px]">
-        <button
-          type="button"
-          onClick={() => fly("dislike")}
-          aria-label="Passer"
-          className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-no/35 bg-surface transition active:scale-90 hover:border-no hover:bg-no/10"
-        >
-          <ThumbsDown className="size-7 text-no" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          onClick={() => fly("neutral")}
-          aria-label="Je ne sais pas, passer"
-          className="grid size-[50px] place-items-center rounded-full border-[1.5px] border-line-strong bg-surface transition active:scale-90 hover:border-ink-soft"
-        >
-          <RotateCcw className="size-5 text-muted" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          onClick={() => fly("like")}
-          aria-label="Ça m'intéresse"
-          className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-ok/40 bg-surface transition active:scale-90 hover:border-ok hover:bg-ok/10"
-        >
-          <ThumbsUp className="size-7 text-ok" strokeWidth={2} />
-        </button>
+        <div className="group relative flex">
+          <button
+            type="button"
+            onClick={() => fly("dislike")}
+            aria-label="Passer"
+            className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-no/35 bg-surface transition active:scale-90 hover:border-no hover:bg-no/10"
+          >
+            <ThumbsDown className="size-7 text-no" strokeWidth={2} />
+          </button>
+          <ControlTip>Pas pour moi</ControlTip>
+        </div>
+        <div className="group relative flex">
+          <button
+            type="button"
+            onClick={() => fly("neutral")}
+            aria-label="Je ne sais pas, passer"
+            className="grid size-[50px] place-items-center rounded-full border-[1.5px] border-line-strong bg-surface transition active:scale-90 hover:border-ink-soft"
+          >
+            <RotateCcw className="size-5 text-muted" strokeWidth={2} />
+          </button>
+          <ControlTip>Je ne sais pas</ControlTip>
+        </div>
+        <div className="group relative flex">
+          <button
+            type="button"
+            onClick={() => fly("like")}
+            aria-label="Ça m'intéresse"
+            className="grid size-[66px] place-items-center rounded-full border-[1.5px] border-ok/40 bg-surface transition active:scale-90 hover:border-ok hover:bg-ok/10"
+          >
+            <ThumbsUp className="size-7 text-ok" strokeWidth={2} />
+          </button>
+          <ControlTip>Ça m&apos;intéresse</ControlTip>
+        </div>
       </div>
 
       {/* Tally : j'aime / passés / progression */}

@@ -33,6 +33,15 @@ vi.mock('./anthropic.provider', () => {
   return { AnthropicProvider };
 });
 
+vi.mock('./mistral.provider', () => {
+  class MistralProvider {
+    name = 'mistral';
+    complete = vi.fn();
+    constructor(public _key: string, public _model: string) {}
+  }
+  return { MistralProvider };
+});
+
 vi.mock('./chain.provider', () => {
   class ChainProvider {
     name: string;
@@ -143,6 +152,25 @@ describe('createAiProvider', () => {
       expect(result?.name).toBe('anthropic');
     });
 
+    it('retourne un MistralProvider quand AI_PROVIDER=mistral avec clé présente', () => {
+      const config = buildConfig({
+        AI_PROVIDER: 'mistral',
+        MISTRAL_API_KEY: 'mk-123',
+      });
+
+      const result = createAiProvider(config, logger);
+
+      expect(result?.name).toBe('mistral');
+    });
+
+    it('retourne null si AI_PROVIDER=mistral mais MISTRAL_API_KEY est absente', () => {
+      const config = buildConfig({ AI_PROVIDER: 'mistral' });
+
+      const result = createAiProvider(config, logger);
+
+      expect(result).toBeNull();
+    });
+
     it('retourne null si AI_PROVIDER=gemini mais GEMINI_API_KEY est absente', () => {
       const config = buildConfig({ AI_PROVIDER: 'gemini' });
 
@@ -189,13 +217,13 @@ describe('createAiProvider', () => {
     });
 
     it('retourne null et logue un warn pour un provider inconnu', () => {
-      const config = buildConfig({ AI_PROVIDER: 'mistral' });
+      const config = buildConfig({ AI_PROVIDER: 'cohere' });
 
       const result = createAiProvider(config, logger);
 
       expect(result).toBeNull();
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('mistral'),
+        expect.stringContaining('cohere'),
       );
     });
   });
@@ -239,6 +267,18 @@ describe('createAiProvider', () => {
 
       expect(result._key).toBe('ak-123');
       expect(result._model).toBe('claude-haiku-4-5');
+    });
+
+    it('utilise le modèle par défaut "mistral-small-latest" pour mistral si AI_MODEL absent', () => {
+      const config = buildConfig({
+        AI_PROVIDER: 'mistral',
+        MISTRAL_API_KEY: 'mk-123',
+      });
+
+      const result = createAiProvider(config, logger) as any;
+
+      expect(result._key).toBe('mk-123');
+      expect(result._model).toBe('mistral-small-latest');
     });
 
     it('surcharge le modèle avec la valeur de AI_MODEL', () => {
@@ -332,7 +372,7 @@ describe('createAiProvider', () => {
 
     it('ignore les providers inconnus dans AI_PROVIDERS et logue un warn', () => {
       const config = buildConfig({
-        AI_PROVIDERS: 'gemini,mistral',
+        AI_PROVIDERS: 'gemini,cohere',
         GEMINI_API_KEY: 'gk-123',
       });
 
@@ -340,7 +380,7 @@ describe('createAiProvider', () => {
 
       expect(result?.name).toBe('gemini');
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('mistral'),
+        expect.stringContaining('cohere'),
       );
     });
 

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FindYourJob — Fiche métier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --serif:"Instrument Serif",Georgia,serif;
+  --sans:"Space Grotesk",system-ui,sans-serif;
+  --surface:#FFFFFF;
+  --paper:#F0F2EB;
+  --surface-2:#F7F8FA;
+  --ink:#15171D;
+  --ink-soft:#3d424d;
+  --muted:#6f7682;
+  --line:#e4e7ec;
+  --line-strong:#d3d9e0;
+  --ok:#1E7A4D;
+  --warn:#b8862a;
+  --panel:#17161B;
+  --on-panel:#F4F2ED;
+  --accent:#1E7A4D;
+  --accent-soft:#dcefe3;
+  --accent-ink:#155c3a;
+  --maxw:920px;
+}
+html[data-mode="dark"]{
+  --paper:#0F1115;--surface:#181b21;--surface-2:#1e222a;
+  --ink:#eef0f3;--ink-soft:#ccd2da;--muted:#8b93a0;
+  --line:#272c35;--line-strong:#39404b;
+  --panel:#0c0e12;--on-panel:#eef0f3;
+  --accent-soft:color-mix(in srgb,var(--accent) 16%,var(--surface));
+  --accent-ink:color-mix(in srgb,var(--accent) 58%,#ffffff);
+  --ok:color-mix(in srgb,var(--accent) 55%,#ffffff);
+  --warn:#e9b949;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+svg{display:block}
+a{color:inherit;text-decoration:none}
+.serif{font-family:var(--serif);font-weight:400;letter-spacing:-.01em;line-height:1.05}
+.muted{color:var(--muted)}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+/* Top bar */
+.topbar{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--paper) 84%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.tb-inner{max-width:var(--maxw);margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between}
+.back{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;color:var(--accent-ink)}
+.back:hover{opacity:.75}
+.tb-right{display:flex;align-items:center;gap:14px}
+.tgl{width:38px;height:38px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink-soft);flex:none}
+.tgl:hover{border-color:var(--accent);color:var(--accent-ink)}
+.tgl svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.7;fill:none}
+.savebtn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:999px;padding:9px 16px;cursor:pointer;transition:.18s}
+.savebtn svg{width:16px;height:16px;stroke:var(--accent-ink);stroke-width:1.8;fill:none}
+.savebtn:hover{border-color:var(--accent)}
+.savebtn.saved{background:var(--accent);color:#fff;border-color:var(--accent)}
+.savebtn.saved svg{stroke:#fff;fill:#fff}
+@media(max-width:560px){.savebtn .lbl{display:none}}
+
+/* Hero */
+.hero{padding:48px 0 38px;border-bottom:1px solid var(--line)}
+.hero-grid{display:grid;grid-template-columns:1fr auto;gap:34px;align-items:center}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-ink)}
+.hero h1{font-size:clamp(34px,5.2vw,56px);margin-top:14px}
+.hero .domain{color:var(--ink-soft);font-size:18px;margin-top:10px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.tagm{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px}
+.tagm svg{width:15px;height:15px;stroke:var(--accent-ink);stroke-width:1.8;fill:none;flex:none}
+.ring{--p:92;width:128px;height:128px;border-radius:50%;background:conic-gradient(var(--accent) calc(var(--p)*1%),var(--line) 0);display:grid;place-items:center;flex:none}
+.ring .ring-in{width:100px;height:100px;border-radius:50%;background:var(--paper);display:grid;place-items:center;text-align:center}
+.ring .rp{font-family:var(--serif);font-size:38px;line-height:1;color:var(--accent-ink)}
+.ring .rl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+@media(max-width:640px){.hero-grid{grid-template-columns:1fr}.ring{order:-1}}
+
+/* Body layout */
+.body{display:grid;grid-template-columns:1fr 290px;gap:48px;padding:48px 0 70px;align-items:start}
+@media(max-width:820px){.body{grid-template-columns:1fr;gap:32px}}
+
+.sec{margin-bottom:42px}
+.sec:last-child{margin-bottom:0}
+.sec h2{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink);display:flex;align-items:center;gap:10px}
+.sec h2 .num{font-family:var(--serif);font-size:22px;color:var(--accent);letter-spacing:0}
+.sec .lead{font-family:var(--serif);font-size:24px;line-height:1.35;margin-top:16px;color:var(--ink)}
+
+/* En bref list */
+.brief{list-style:none;margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.brief li{display:flex;gap:13px;color:var(--ink-soft);font-size:16px}
+.brief li svg{width:19px;height:19px;flex:none;margin-top:3px;stroke:var(--accent);stroke-width:1.9;fill:none}
+
+/* Missions */
+.missions{list-style:none;margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.missions{grid-template-columns:1fr}}
+.missions li{display:flex;align-items:flex-start;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 16px;font-size:15px;color:var(--ink-soft)}
+.missions li .b{flex:none;width:24px;height:24px;border-radius:7px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--serif);font-size:15px;margin-top:1px}
+
+/* Why / vigilance blocks */
+.note{border-radius:16px;padding:24px 26px;border:1px solid var(--line)}
+.note.plus{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 22%,transparent)}
+.note .nt{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink)}
+.note .nt svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.9;fill:none}
+.note p{margin-top:12px;color:var(--ink-soft);font-size:15.5px}
+.note.warn{background:var(--surface)}
+.note.warn .nt{color:var(--warn)}
+.note ul{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:9px}
+.note ul li{display:flex;gap:11px;font-size:15px;color:var(--ink-soft)}
+.note ul li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-top:8px}
+
+/* Steps */
+.steps{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.stp{display:flex;align-items:flex-start;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stp .sn{flex:none;font-family:var(--serif);font-size:26px;color:var(--accent);line-height:1;width:30px}
+.stp .stxt{font-size:15px;color:var(--ink-soft)}
+.stp .stxt b{color:var(--ink);font-weight:600;display:block;margin-bottom:2px;font-size:15.5px}
+
+/* Sidebar */
+.aside{position:sticky;top:88px;display:flex;flex-direction:column;gap:18px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px}
+.panel h3{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.skills{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.skill{font-size:13px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:6px 13px}
+.kv{margin-top:14px;display:flex;flex-direction:column;gap:14px}
+.kv .row .k{font-size:12.5px;color:var(--muted)}
+.kv .row .v{font-size:16px;font-weight:600;margin-top:2px}
+.kv .row .v.big{font-family:var(--serif);font-weight:400;font-size:26px;color:var(--accent-ink)}
+.panel.cta{background:var(--panel);color:var(--on-panel);border-color:var(--panel)}
+.panel.cta h3{color:var(--accent)}
+.panel.cta p{font-size:14px;color:rgba(255,255,255,.7);margin-top:8px;line-height:1.5}
+.panel.cta .btn{margin-top:16px;width:100%;justify-content:center}
+.btn{display:inline-flex;align-items:center;gap:.5em;font-family:var(--sans);font-weight:600;font-size:15px;border-radius:999px;padding:13px 22px;cursor:pointer;border:1px solid transparent;background:var(--accent);color:#fff;transition:background .2s,transform .15s}
+.btn:hover{background:#fff;color:var(--ink)}
+.btn:active{transform:translateY(1px)}
+
+/* Footer nav */
+.fnav{border-top:1px solid var(--line);padding:30px 0 60px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.fnav a{display:inline-flex;align-items:center;gap:9px;font-size:15px;font-weight:500;color:var(--ink)}
+.fnav a:hover{color:var(--accent-ink)}
+.fnav .next{margin-left:auto;text-align:right}
+.fnav .lab{font-size:12px;color:var(--muted);display:block;letter-spacing:.04em}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-inner">
+    <a href="FindYourJob - Resultats.html" class="back"><span style="font-size:17px;line-height:1">←</span> Retour aux résultats</a>
+    <div class="tb-right">
+      <button class="savebtn" id="saveBtn"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span class="lbl">Enregistrer</span></button>
+      <button class="tgl" id="themeBtn" aria-label="Changer de thème"></button>
+    </div>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Fiche métier</p>
+      <h1 class="serif">Développeur / Développeuse informatique</h1>
+      <p class="domain">Systèmes d'information et de télécommunication</p>
+      <div class="meta">
+        <span class="tagm"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/><path d="M9 22h6"/></svg> 35–55 k€ en début de carrière</span>
+        <span class="tagm"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 3v6h-6"/></svg> Secteur en forte demande</span>
+        <span class="tagm"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Bac+2 à Bac+5</span>
+      </div>
+    </div>
+    <div class="ring" style="--p:92"><div class="ring-in"><div><div class="rp">92%</div><div class="rl">Adéquation</div></div></div></div>
+  </div>
+</header>
+
+<main class="wrap body">
+  <div class="content">
+
+    <section class="sec">
+      <h2><span class="num">01</span> En bref</h2>
+      <p class="lead">Le ou la développeur·se informatique conçoit, développe et améliore des systèmes et applications selon les besoins des utilisateurs.</p>
+      <ul class="brief">
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Conçoit et développe des applications informatiques selon les besoins des utilisateurs.</li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Participe à l'analyse des besoins des clients et propose des solutions techniques adaptées.</li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Rédige des documentations techniques et des guides d'utilisation pour les applications développées.</li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Assure la maintenance et la mise à jour des systèmes pour garantir leur efficacité et leur sécurité.</li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Collabore avec des équipes multidisciplinaires pour intégrer de nouvelles technologies.</li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Effectue des tests et des validations pour assurer la qualité et la performance des applications.</li>
+      </ul>
+    </section>
+
+    <section class="sec">
+      <h2><span class="num">02</span> Missions typiques</h2>
+      <ul class="missions">
+        <li><span class="b">·</span> Concevoir une application web</li>
+        <li><span class="b">·</span> Développer une application en lien avec une base de données</li>
+        <li><span class="b">·</span> Réaliser des études et développements informatiques</li>
+        <li><span class="b">·</span> Concevoir et maintenir un système de cybersécurité</li>
+        <li><span class="b">·</span> Optimiser les processus de qualité pour fiabiliser les logiciels</li>
+        <li><span class="b">·</span> Analyser les besoins informatiques</li>
+        <li><span class="b">·</span> Coder et tester les fonctionnalités</li>
+        <li><span class="b">·</span> Traiter les retours utilisateurs pour améliorer les systèmes</li>
+        <li><span class="b">·</span> Documenter les procédures techniques</li>
+        <li><span class="b">·</span> Respecter les normes de sécurité dans le développement</li>
+      </ul>
+    </section>
+
+    <section class="sec">
+      <h2><span class="num">03</span> Pourquoi ce métier te correspond</h2>
+      <div class="note plus" style="margin-top:16px">
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Ce qui va te plaire</div>
+        <p>Tu aimes résoudre des problèmes concrets et voir l'impact de ton travail rapidement. Le développement réunit logique et créativité, avec beaucoup d'autonomie tout en collaborant avec une équipe — exactement l'équilibre que tu as décrit dans le questionnaire.</p>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2><span class="num">04</span> Points de vigilance</h2>
+      <div class="note warn" style="margin-top:16px">
+        <div class="nt"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg> À avoir en tête</div>
+        <ul>
+          <li>Le secteur évolue vite : il faut se former en continu pour rester à jour.</li>
+          <li>Une partie du temps passe à corriger des bugs et lire du code existant, pas seulement à créer.</li>
+          <li>Le travail peut être très sédentaire et demande de longues périodes de concentration.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2><span class="num">05</span> 3 étapes pour t'en rapprocher</h2>
+      <div class="steps">
+        <div class="stp"><div class="sn">1</div><div class="stxt"><b>Apprends les bases d'un langage</b>Commence par un cours gratuit (Python ou JavaScript) et code un premier petit projet de A à Z.</div></div>
+        <div class="stp"><div class="sn">2</div><div class="stxt"><b>Construis un mini-portfolio</b>Publie 2 ou 3 projets sur GitHub : un site, une petite app connectée à une base de données.</div></div>
+        <div class="stp"><div class="sn">3</div><div class="stxt"><b>Échange avec un·e développeur·se</b>Contacte quelqu'un du métier sur LinkedIn pour valider la réalité du quotidien avant de t'engager dans une formation.</div></div>
+      </div>
+    </section>
+
+  </div>
+
+  <aside class="aside">
+    <div class="panel">
+      <h3>Compétences clés</h3>
+      <div class="skills">
+        <span class="skill">Algorithmique</span>
+        <span class="skill">JavaScript</span>
+        <span class="skill">Python</span>
+        <span class="skill">SQL</span>
+        <span class="skill">Git</span>
+        <span class="skill">Tests & debug</span>
+        <span class="skill">Travail en équipe</span>
+        <span class="skill">Rigueur</span>
+      </div>
+      <div class="kv">
+        <div class="row"><div class="k">Salaire débutant</div><div class="v big">35–55 k€</div></div>
+        <div class="row"><div class="k">Niveau d'études</div><div class="v">Bac+2 à Bac+5</div></div>
+        <div class="row"><div class="k">Perspectives</div><div class="v">Forte demande</div></div>
+      </div>
+    </div>
+    <div class="panel cta">
+      <h3>Ton plan d'action</h3>
+      <p>Reçois par email un parcours détaillé : formations, ressources gratuites et offres adaptées à ton profil.</p>
+      <button class="btn" id="planBtn">Obtenir mon plan →</button>
+    </div>
+  </aside>
+</main>
+
+<div class="wrap">
+  <nav class="fnav">
+    <a href="FindYourJob - Resultats.html"><span style="font-size:17px;line-height:1">←</span> <span><span class="lab">Précédent</span>Tous les résultats</span></a>
+    <a href="#" class="next"><span><span class="lab">Piste suivante</span>UX / Product Designer</span> <span style="font-size:17px;line-height:1">→</span></a>
+  </nav>
+</div>
+
+<script>
+(function(){
+  var html=document.documentElement;
+  var tbtn=document.getElementById('themeBtn');
+  var moon='<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
+  var sun='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  function applyMode(m){ html.setAttribute('data-mode',m); tbtn.innerHTML=m==='dark'?sun:moon; try{localStorage.setItem('fyj-mode',m);}catch(e){} }
+  var sm='light'; try{ sm=localStorage.getItem('fyj-mode')||'light'; }catch(e){}
+  applyMode(sm);
+  tbtn.addEventListener('click',function(){ applyMode(html.getAttribute('data-mode')==='dark'?'light':'dark'); });
+
+  var save=document.getElementById('saveBtn');
+  save.addEventListener('click',function(){
+    save.classList.toggle('saved');
+    save.querySelector('.lbl').textContent=save.classList.contains('saved')?'Enregistré':'Enregistrer';
+  });
+  document.getElementById('planBtn').addEventListener('click',function(){ alert('→ Plan d\'action personnalisé envoyé par email.'); });
+})();
+</script>
+</body>
+</html>
