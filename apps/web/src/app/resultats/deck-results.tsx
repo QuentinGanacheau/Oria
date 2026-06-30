@@ -657,21 +657,47 @@ function PaywallScreen(props: {
         </div>
       )}
 
-      <p className="mt-5 text-sm font-medium text-ink">
-        Débloque la suite :
+      <p className="mt-6 flex items-center gap-1.5 text-sm font-semibold text-ink">
+        <Sparkles className="size-4 text-accent" strokeWidth={1.9} />
+        Ce que débloque ton rapport complet
       </p>
-      <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
+      <ul className="mt-3 flex flex-col gap-3.5">
         {[
-          "De nouveaux métiers affinés à chaque paquet par l'IA",
-          "Explications personnalisées sur chaque carte",
-          "Plan d'action concret sur chaque fiche",
+          {
+            title: "De nouveaux métiers à chaque tour",
+            desc: "L'IA t'en propose d'autres à chaque paquet, affinés selon tes 👍 et tes 👎 — pour découvrir des pistes que tu n'aurais pas cherchées toi-même.",
+          },
+          {
+            title: "Le pourquoi de chaque match",
+            desc: "Une explication personnalisée sur chaque carte : pourquoi ce métier colle à ton profil, et les points de vigilance honnêtes.",
+          },
+          {
+            title: "Un plan d'action concret",
+            desc: "Sur chaque fiche : formations (dont CPF), fourchette de salaire et premières étapes pour t'y mettre.",
+          },
         ].map((f) => (
-          <li key={f} className="flex gap-2.5">
-            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
-            {f}
+          <li key={f.title} className="flex gap-3">
+            <Check className="mt-0.5 size-4 shrink-0 text-ok" strokeWidth={2.4} />
+            <div>
+              <p className="text-sm font-medium text-ink">{f.title}</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{f.desc}</p>
+            </div>
           </li>
         ))}
       </ul>
+
+      {/* Réassurance : lève les freins classiques avant le clic (abonnement ? durée ?). */}
+      <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-medium text-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <Check className="size-3.5 text-ok" strokeWidth={2.4} /> Paiement unique
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Check className="size-3.5 text-ok" strokeWidth={2.4} /> Accès 1 an à tes résultats
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Check className="size-3.5 text-ok" strokeWidth={2.4} /> Sans abonnement
+        </span>
+      </div>
       {props.needsEmailForPayment ? (
         <div className="mt-4">
           <InlineEmailCapture

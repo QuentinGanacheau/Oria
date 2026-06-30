@@ -47,7 +47,7 @@ export function buildPaymentEmail(data: PaymentTemplateData): {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Paiement confirmé — FindYourJob</title>
+  <title>Paiement confirmé — Oryam</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc;">
@@ -59,7 +59,7 @@ export function buildPaymentEmail(data: PaymentTemplateData): {
           <tr>
             <td style="padding: 0 0 24px 0; text-align: center;">
               <h1 style="margin: 0; color: #4f46e5; font-size: 24px; font-weight: 700;">
-                FindYourJob
+                Oryam
               </h1>
             </td>
           </tr>
@@ -136,7 +136,7 @@ export function buildPaymentEmail(data: PaymentTemplateData): {
 </body>
 </html>`;
 
-  const text = `Paiement confirmé — FindYourJob
+  const text = `Paiement confirmé — Oryam
 
 Merci ! Ton rapport complet est débloqué.
 

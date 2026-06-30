@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Page d\'accueil', () => {
   test('charge et affiche le titre principal', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/FindYourJob/i);
+    await expect(page).toHaveTitle(/Oryam/i);
     // Le titre hero doit être visible
     await expect(page.locator('h1').first()).toBeVisible();
   });

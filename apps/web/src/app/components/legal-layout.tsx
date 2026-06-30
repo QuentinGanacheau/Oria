@@ -5,9 +5,8 @@ import ThemeToggle from "@/components/theme-toggle";
 function Logo({ className = "" }: { className?: string }) {
   return (
     <span className={`flex items-center gap-2 font-serif tracking-tight ${className}`}>
-      FindYour
+      Oryam
       <span className="mb-1.5 inline-block size-[9px] rounded-full bg-accent" />
-      Job
     </span>
   );
 }

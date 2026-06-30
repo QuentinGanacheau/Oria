@@ -124,9 +124,8 @@ const FAQS = [
 function Logo({ className = "" }: { className?: string }) {
   return (
     <span className={`flex items-center gap-2 font-serif tracking-tight ${className}`}>
-      FindYour
+      Oryam
       <span className="mb-1.5 inline-block size-[9px] rounded-full bg-accent" />
-      Job
     </span>
   );
 }
@@ -140,18 +139,20 @@ export default function Home() {
       {/* ── Navigation ──────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 border-b border-line bg-paper/80 backdrop-blur-md">
         <div className="mx-auto flex h-[70px] max-w-[1180px] items-center justify-between px-6">
-          <Logo className="text-[26px]" />
-          <nav className="hidden items-center gap-8 text-[15px] text-ink-soft md:flex">
-            <a href="#comment" className="transition-colors hover:text-accent-ink">
-              Comment ça marche
-            </a>
-            <a href="#tarifs" className="transition-colors hover:text-accent-ink">
-              Tarifs
-            </a>
-            <a href="#faq" className="transition-colors hover:text-accent-ink">
-              FAQ
-            </a>
-          </nav>
+          <div className="flex items-center gap-10">
+            <Logo className="text-[26px]" />
+            <nav className="hidden items-center gap-8 text-[15px] text-ink-soft md:flex">
+              <a href="#comment" className="transition-colors hover:text-accent-ink">
+                Comment ça marche
+              </a>
+              <a href="#tarifs" className="transition-colors hover:text-accent-ink">
+                Tarifs
+              </a>
+              <a href="#faq" className="transition-colors hover:text-accent-ink">
+                FAQ
+              </a>
+            </nav>
+          </div>
           <div className="flex items-center gap-3.5">
             <ThemeToggle />
             <Link
@@ -349,7 +350,7 @@ export default function Home() {
         <section className="mx-auto max-w-[1180px] px-6 py-[92px]">
           <div className="max-w-[30em]">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent-ink">
-              Pourquoi FindYourJob
+              Pourquoi Oryam
             </p>
             <h2 className="mt-3.5 font-serif text-[clamp(32px,4vw,52px)] leading-tight tracking-tight">
               Conçu pour donner de vraies réponses.
@@ -547,11 +548,11 @@ export default function Home() {
             <Link href="/cgv" className="transition-colors hover:text-accent-ink">
               CGV
             </Link>
-            <a href="mailto:contact@findyourjob.fr" className="transition-colors hover:text-accent-ink">
+            <a href="mailto:contact@oryam.fr" className="transition-colors hover:text-accent-ink">
               Contact
             </a>
           </nav>
-          <p>© {new Date().getFullYear()} FindYourJob</p>
+          <p>© {new Date().getFullYear()} Oryam</p>
         </div>
       </footer>
 

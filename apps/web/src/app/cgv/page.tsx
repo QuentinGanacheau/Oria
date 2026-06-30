@@ -1,7 +1,7 @@
 import LegalLayout from "../components/legal-layout";
 
 export const metadata = {
-  title: "Conditions Générales de Vente — FindYourJob",
+  title: "Conditions Générales de Vente — Oryam",
 };
 
 export default function CGV() {
@@ -12,7 +12,7 @@ export default function CGV() {
       <p>
         Les présentes Conditions Générales de Vente (CGV) régissent les ventes de services
         numériques réalisées par <strong>[NOM OU RAISON SOCIALE]</strong> (ci-après
-        &laquo;&nbsp;le Vendeur&nbsp;&raquo;) via le site FindYourJob, à destination de tout
+        &laquo;&nbsp;le Vendeur&nbsp;&raquo;) via le site Oryam, à destination de tout
         utilisateur souhaitant accéder au rapport d&apos;orientation complet
         (ci-après &laquo;&nbsp;le Client&nbsp;&raquo;).
       </p>
@@ -22,7 +22,7 @@ export default function CGV() {
 
       <h2>2. Description du service payant</h2>
       <p>
-        Le rapport complet (&laquo;&nbsp;FindYourJob — Rapport complet&nbsp;&raquo;) est un
+        Le rapport complet (&laquo;&nbsp;Oryam — Rapport complet&nbsp;&raquo;) est un
         contenu numérique personnalisé comprenant :
       </p>
       <ul>
@@ -57,7 +57,7 @@ export default function CGV() {
       </p>
       <p>
         Les données bancaires du Client sont traitées exclusivement par Stripe et ne sont jamais
-        stockées par FindYourJob. Stripe est certifié PCI-DSS niveau 1.
+        stockées par Oryam. Stripe est certifié PCI-DSS niveau 1.
       </p>
 
       <h2>5. Droit de rétractation</h2>
@@ -102,7 +102,7 @@ export default function CGV() {
 
       <h2>8. Responsabilité</h2>
       <p>
-        Les résultats fournis par FindYourJob sont générés par intelligence artificielle à partir
+        Les résultats fournis par Oryam sont générés par intelligence artificielle à partir
         des réponses de l&apos;utilisateur. Ils ont une vocation indicative et ne constituent pas
         un conseil professionnel en orientation, en recrutement ou en bilan de compétences.
       </p>

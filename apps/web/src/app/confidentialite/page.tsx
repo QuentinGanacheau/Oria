@@ -1,7 +1,7 @@
 import LegalLayout from "../components/legal-layout";
 
 export const metadata = {
-  title: "Politique de confidentialité — FindYourJob",
+  title: "Politique de confidentialité — Oryam",
 };
 
 export default function Confidentialite() {
@@ -10,7 +10,7 @@ export default function Confidentialite() {
 
       <p>
         La présente politique décrit comment <strong>[NOM OU RAISON SOCIALE]</strong>, éditeur du
-        site FindYourJob (ci-après &laquo;&nbsp;nous&nbsp;&raquo;), collecte, utilise et protège
+        site Oryam (ci-après &laquo;&nbsp;nous&nbsp;&raquo;), collecte, utilise et protège
         vos données personnelles, conformément au Règlement Général sur la Protection des Données
         (RGPD — UE 2016/679) et à la loi Informatique et Libertés.
       </p>
