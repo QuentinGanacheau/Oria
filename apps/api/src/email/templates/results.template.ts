@@ -69,7 +69,7 @@ export function buildResultsEmail(data: ResultsTemplateData): {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tes résultats FindYourJob</title>
+  <title>Tes résultats Oryam</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc;">
@@ -81,7 +81,7 @@ export function buildResultsEmail(data: ResultsTemplateData): {
           <tr>
             <td style="padding: 0 0 24px 0; text-align: center;">
               <h1 style="margin: 0; color: #4f46e5; font-size: 24px; font-weight: 700;">
-                FindYourJob
+                Oryam
               </h1>
             </td>
           </tr>
@@ -123,7 +123,7 @@ export function buildResultsEmail(data: ResultsTemplateData): {
           <tr>
             <td style="padding: 24px 32px; background: #ffffff; border-radius: 0 0 16px 16px; border: 1px solid #e2e8f0; border-top: none;">
               <p style="margin: 0 0 8px 0; color: #94a3b8; font-size: 12px; line-height: 1.5; text-align: center;">
-                Tu reçois cet email car tu as complété le questionnaire FindYourJob.
+                Tu reçois cet email car tu as complété le questionnaire Oryam.
               </p>
               <p style="margin: 0; color: #94a3b8; font-size: 12px; text-align: center;">
                 Une question ? Réponds simplement à cet email.
@@ -144,7 +144,7 @@ export function buildResultsEmail(data: ResultsTemplateData): {
     .map((m, i) => `${i + 1}. ${m.title} — ${m.scorePercent}% d'adéquation\n   ${m.tagline}`)
     .join('\n\n');
 
-  const text = `Voici tes pistes métiers FindYourJob
+  const text = `Voici tes pistes métiers Oryam
 
 On a analysé tes réponses. Voici les 3 métiers qui collent le mieux à ton profil :
 
@@ -153,7 +153,7 @@ ${textMatches}
 Voir tous mes résultats : ${resultsUrl}
 ${totalMatches > 3 ? `\n${totalMatches - 3} autres métiers t'attendent dans ton rapport complet.\n` : ''}
 ---
-Tu reçois cet email car tu as complété le questionnaire FindYourJob.
+Tu reçois cet email car tu as complété le questionnaire Oryam.
 Une question ? Réponds simplement à cet email.`;
 
   return {

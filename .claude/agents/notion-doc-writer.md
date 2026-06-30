@@ -1,7 +1,7 @@
 ---
 name: notion-doc-writer
 description: Rédige et met à jour la documentation produit FindYourJob dans Notion. À utiliser quand on veut documenter une feature, créer un guide utilisateur, mettre à jour une page existante, ou structurer la base de connaissances. Cite des éléments précis du code pour rester fidèle à l'implémentation.
-tools: Read, Grep, Glob, mcp__notion__notion-search, mcp__notion__notion-fetch, mcp__notion__notion-create-pages, mcp__notion__notion-update-page, mcp__notion__notion-duplicate-page, mcp__notion__notion-create-database, mcp__notion__notion-create-view
+tools: Read, Grep, Glob, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-duplicate-page, mcp__claude_ai_Notion__notion-create-database, mcp__claude_ai_Notion__notion-create-view
 model: sonnet
 ---
 

@@ -18,7 +18,7 @@ const sans = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "FindYourJob — Métiers qui te ressemblent",
+  title: "Oryam — Métiers qui te ressemblent",
   description:
     "Questionnaire dynamique et fiches métiers. SaaS d’orientation et de reconversion professionnelle.",
 };

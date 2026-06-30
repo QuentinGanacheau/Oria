@@ -31,7 +31,9 @@
       "Bash(node -e ' *)",
       "Bash(curl -s http://localhost:4000/v1/jobs/J1136)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('recruitmentLevel:', d.get\\('recruitmentLevel','ABSENT'\\)\\); print\\('offerCount:', d.get\\('offerCount','ABSENT'\\)\\)\")",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-update-page"
     ]
   }
 }

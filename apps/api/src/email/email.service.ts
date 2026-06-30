@@ -14,7 +14,7 @@ import { buildResultsEmail } from './templates/results.template';
  *
  * Configuration via ENV :
  *   - RESEND_API_KEY : clé API Resend (re_xxx)
- *   - EMAIL_FROM     : adresse expéditrice (ex: "FindYourJob <noreply@findyourjob.fr>")
+ *   - EMAIL_FROM     : adresse expéditrice (ex: "Oryam <noreply@oryam.fr>")
  *                      → en mode test, utiliser "onboarding@resend.dev"
  *   - FRONTEND_URL   : pour construire les liens dans les emails
  */

@@ -1,7 +1,7 @@
 import LegalLayout from "../components/legal-layout";
 
 export const metadata = {
-  title: "Mentions légales — FindYourJob",
+  title: "Mentions légales — Oryam",
 };
 
 export default function MentionsLegales() {
@@ -10,7 +10,7 @@ export default function MentionsLegales() {
 
       <h2>1. Éditeur du site</h2>
       <p>
-        Le site <strong>FindYourJob</strong> (accessible à l&apos;adresse{" "}
+        Le site <strong>Oryam</strong> (accessible à l&apos;adresse{" "}
         <strong>[URL DU SITE]</strong>) est édité par :
       </p>
       <ul>
@@ -52,7 +52,7 @@ export default function MentionsLegales() {
       <h2>5. Limitation de responsabilité</h2>
       <p>
         Les informations présentes sur ce site sont fournies à titre indicatif et ne constituent pas
-        un conseil professionnel en orientation ou en recrutement. FindYourJob ne peut garantir
+        un conseil professionnel en orientation ou en recrutement. Oryam ne peut garantir
         l&apos;exactitude, l&apos;exhaustivité ou l&apos;actualité des informations diffusées.
       </p>
       <p>
