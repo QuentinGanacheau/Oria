@@ -36,6 +36,16 @@ export type JobProfile = {
   offerCount: number | null;
 };
 
+/**
+ * Forme (partielle) d'une entrée de `RefinedBatch.matches` — le JSON figé des
+ * paquets affinés du swipe deck. On ne type que les champs lus ici : le slug
+ * du métier et le cache de fiche personnalisée (ajouté à la volée à la 1ʳᵉ visite).
+ */
+type RefinedBatchMatch = {
+  job?: { slug?: string };
+  personalizedContent?: PersonalizedSheetContent;
+};
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -61,10 +71,17 @@ export class JobsService {
   /**
    * Retourne la fiche personnalisée pour un couple (session, métier).
    *
-   * Pattern cache-aside :
-   *  - Cache hit  → retour immédiat depuis MatchResult.personalizedContent (0 appel IA)
+   * Deux sources de métiers, chacune son propre cache-aside :
+   *  - Passe 1 (top gratuit) → MatchResult.personalizedContent
+   *  - Passe 2 (paquets affinés du swipe deck, payant) → RefinedBatch.matches[].personalizedContent
+   *
+   * Dans les deux cas :
+   *  - Cache hit  → retour immédiat (0 appel IA)
    *  - Cache miss → génération IA → stockage → retour
    *  - IA indisponible → null (dégradation propre, le front affiche la fiche statique)
+   *
+   * Si le métier n'appartient à aucune des deux sources pour cette session
+   * → null (session inconnue ou métier non servi à cet utilisateur).
    */
   async getPersonalizedSheet(
     code: string,
@@ -77,15 +94,103 @@ export class JobsService {
       where: { sessionId, jobSlug: code },
     });
 
-    // Pas de match = session inconnue ou métier non classé pour cette session
-    if (!matchResult) return null;
+    // Passe 1 : métier du top gratuit, caché sur MatchResult.
+    if (matchResult) {
+      if (matchResult.personalizedContent !== null) {
+        return matchResult.personalizedContent as PersonalizedSheetContent;
+      }
 
-    // Cache hit
-    if (matchResult.personalizedContent !== null) {
-      return matchResult.personalizedContent as PersonalizedSheetContent;
+      const content = await this.generateSheet(
+        job,
+        sessionId,
+        matchResult.rank,
+      );
+      if (content) {
+        await this.prisma.matchResult.update({
+          where: { id: matchResult.id },
+          data: {
+            personalizedContent: content as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return content;
     }
 
-    // Cache miss → préparation de l'input IA
+    // Passe 2 : métier issu d'un paquet affiné (swipe deck). Ces métiers ne sont
+    // jamais dans MatchResult — leur cache vit dans le JSON du RefinedBatch.
+    return this.getRefinedBatchSheet(job, sessionId, code);
+  }
+
+  /**
+   * Fiche personnalisée d'un métier de paquet affiné (passe 2).
+   *
+   * Le cache est stocké directement dans le JSON `RefinedBatch.matches`, sur
+   * l'entrée du métier concerné — plutôt que de créer un MatchResult, ce qui
+   * polluerait la séparation passe 1 / passe 2 (restauration, exclusions).
+   */
+  private async getRefinedBatchSheet(
+    job: JobProfile,
+    sessionId: string,
+    code: string,
+  ): Promise<PersonalizedSheetContent | null> {
+    const batches = await this.prisma.refinedBatch.findMany({
+      where: { sessionId },
+      orderBy: { batchNumber: 'asc' },
+    });
+
+    // Rang global approximatif : nb de métiers servis avant celui-ci (passe 1 +
+    // paquets précédents). Sert uniquement à teinter le ton du prompt IA.
+    const passe1Count = await this.prisma.matchResult.count({
+      where: { sessionId },
+    });
+    let precedingCount = passe1Count;
+
+    for (const batch of batches) {
+      const matches = (batch.matches as unknown as RefinedBatchMatch[]) ?? [];
+      const index = matches.findIndex((m) => m?.job?.slug === code);
+      if (index === -1) {
+        precedingCount += matches.length;
+        continue;
+      }
+
+      const target = matches[index];
+
+      // Cache hit
+      if (target.personalizedContent) {
+        return target.personalizedContent;
+      }
+
+      const content = await this.generateSheet(
+        job,
+        sessionId,
+        precedingCount + index + 1,
+      );
+
+      // Mise en cache dans le JSON du batch uniquement si la génération a réussi.
+      if (content) {
+        matches[index] = { ...target, personalizedContent: content };
+        await this.prisma.refinedBatch.update({
+          where: { id: batch.id },
+          data: { matches: matches as unknown as Prisma.InputJsonValue },
+        });
+      }
+      return content;
+    }
+
+    // Métier absent des deux passes : pas servi à cette session.
+    return null;
+  }
+
+  /**
+   * Prépare l'input IA depuis les réponses de la session et génère la fiche.
+   * Partagé entre la passe 1 (MatchResult) et la passe 2 (RefinedBatch).
+   * Retourne null si la session n'a pas de réponses ou si l'IA est indisponible.
+   */
+  private async generateSheet(
+    job: JobProfile,
+    sessionId: string,
+    rank: number,
+  ): Promise<PersonalizedSheetContent | null> {
     const answers = await this.prisma.sessionAnswer.findMany({
       where: { sessionId },
       include: { question: true, option: true },
@@ -109,24 +214,12 @@ export class JobsService {
         skills: job.skills,
       },
       answers: formattedAnswers,
-      rank: matchResult.rank,
+      rank,
       situation,
       userContext,
     };
 
-    const content = await this.ai.generatePersonalizedSheet(input);
-
-    // Mise en cache uniquement si la génération a réussi
-    if (content) {
-      await this.prisma.matchResult.update({
-        where: { id: matchResult.id },
-        data: {
-          personalizedContent: content as unknown as Prisma.InputJsonValue,
-        },
-      });
-    }
-
-    return content;
+    return this.ai.generatePersonalizedSheet(input);
   }
 
   // ─── Adaptation ROME → JobProfile ─────────────────────────────────────────
