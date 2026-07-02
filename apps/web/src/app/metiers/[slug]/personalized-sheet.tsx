@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Lock,
   Map as MapIcon,
+  RotateCw,
   Search,
   Target,
 } from "lucide-react";
@@ -320,7 +321,7 @@ export default function PersonalizedSheetSection({ slug }: { slug: string }) {
   const unlocked = isUnlocked();
   const canView = !!sessionId && (rank === 1 || unlocked);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!canView || !sessionId) return;
 
     setLoading(true);
@@ -329,10 +330,24 @@ export default function PersonalizedSheetSection({ slug }: { slug: string }) {
     apiGet<{ content: PersonalizedSheetContent | null }>(
       `/v1/jobs/${slug}/sheet?sessionId=${encodeURIComponent(sessionId)}`,
     )
-      .then((res) => setContent(res.content))
+      .then((res) => {
+        // `content: null` = l'IA n'a pas pu générer la fiche (providers KO).
+        // On le traite comme une erreur réessayable plutôt qu'un écran vide.
+        if (res.content) {
+          setContent(res.content);
+        } else {
+          setError(
+            "L'analyse personnalisée n'a pas pu être générée. Réessaie dans un instant.",
+          );
+        }
+      })
       .catch(() => setError("Impossible de charger l'analyse personnalisée."))
       .finally(() => setLoading(false));
   }, [slug, sessionId, canView]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (!sessionId) return null;
 
@@ -359,7 +374,24 @@ export default function PersonalizedSheetSection({ slug }: { slug: string }) {
   }
 
   if (loading) return <Skeleton />;
-  if (error) return <p className="text-sm text-muted">{error}</p>;
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-warn/35 bg-surface p-6 text-center">
+        <div className="mx-auto grid size-11 place-items-center rounded-full bg-warn/10">
+          <AlertTriangle className="size-5 text-warn" strokeWidth={1.9} />
+        </div>
+        <p className="mt-3 text-[15px] text-ink-soft">{error}</p>
+        <button
+          type="button"
+          onClick={load}
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-paper transition hover:bg-accent hover:text-white"
+        >
+          <RotateCw className="size-4" strokeWidth={2} />
+          Réessayer
+        </button>
+      </div>
+    );
+  }
   if (!content) return null;
 
   const tabs: { id: TabId; label: string; Icon: typeof Check; show: boolean }[] = [

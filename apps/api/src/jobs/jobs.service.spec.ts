@@ -39,6 +39,11 @@ const prismaMock = {
   matchResult: {
     findFirst: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
+  },
+  refinedBatch: {
+    findMany: vi.fn(),
+    update: vi.fn(),
   },
   sessionAnswer: {
     findMany: vi.fn(),
@@ -158,13 +163,101 @@ describe('JobsService', () => {
       );
     });
 
-    it('retourne null si aucun MatchResult trouve', async () => {
+    it('retourne null si le metier n\'est ni en passe 1 ni en passe 2', async () => {
       prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
       prismaMock.matchResult.findFirst.mockResolvedValue(null);
+      prismaMock.matchResult.count.mockResolvedValue(3);
+      prismaMock.refinedBatch.findMany.mockResolvedValue([]);
 
       const result = await service.getPersonalizedSheet(code, sessionId);
 
       expect(result).toBeNull();
+      expect(aiMock.generatePersonalizedSheet).not.toHaveBeenCalled();
+    });
+
+    // ── Passe 2 : métiers des paquets affinés (swipe deck, payant) ──────────
+    describe('passe 2 (paquets affinés)', () => {
+      it('genere via IA et met en cache dans le JSON du batch', async () => {
+        prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
+        prismaMock.matchResult.findFirst.mockResolvedValue(null);
+        prismaMock.matchResult.count.mockResolvedValue(3);
+        prismaMock.refinedBatch.findMany.mockResolvedValue([
+          {
+            id: 'batch-2',
+            batchNumber: 2,
+            matches: [
+              { job: { slug: 'A1101' }, score: 80 },
+              { job: { slug: code }, score: 72 },
+            ],
+          },
+        ]);
+        prismaMock.sessionAnswer.findMany.mockResolvedValue(fakeAnswers);
+        aiMock.generatePersonalizedSheet.mockResolvedValue(generated);
+
+        const result = await service.getPersonalizedSheet(code, sessionId);
+
+        expect(result).toEqual(generated);
+        // rank global = 3 (passe 1) + index 1 + 1 = 5
+        expect(aiMock.generatePersonalizedSheet).toHaveBeenCalledWith(
+          expect.objectContaining({ rank: 5 }),
+        );
+        // Le cache est écrit dans matches[1], pas dans MatchResult.
+        expect(prismaMock.refinedBatch.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'batch-2' },
+            data: expect.objectContaining({
+              matches: expect.arrayContaining([
+                expect.objectContaining({
+                  job: { slug: code },
+                  personalizedContent: generated,
+                }),
+              ]),
+            }),
+          }),
+        );
+        expect(prismaMock.matchResult.update).not.toHaveBeenCalled();
+      });
+
+      it('retourne le cache du batch sans rappeler l\'IA', async () => {
+        prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
+        prismaMock.matchResult.findFirst.mockResolvedValue(null);
+        prismaMock.matchResult.count.mockResolvedValue(3);
+        prismaMock.refinedBatch.findMany.mockResolvedValue([
+          {
+            id: 'batch-2',
+            batchNumber: 2,
+            matches: [
+              { job: { slug: code }, score: 72, personalizedContent: generated },
+            ],
+          },
+        ]);
+
+        const result = await service.getPersonalizedSheet(code, sessionId);
+
+        expect(result).toEqual(generated);
+        expect(aiMock.generatePersonalizedSheet).not.toHaveBeenCalled();
+        expect(prismaMock.refinedBatch.update).not.toHaveBeenCalled();
+      });
+
+      it('n\'ecrit pas le cache si l\'IA est indisponible', async () => {
+        prismaMock.romeJob.findUnique.mockResolvedValue(fakeRomeJob);
+        prismaMock.matchResult.findFirst.mockResolvedValue(null);
+        prismaMock.matchResult.count.mockResolvedValue(3);
+        prismaMock.refinedBatch.findMany.mockResolvedValue([
+          {
+            id: 'batch-2',
+            batchNumber: 2,
+            matches: [{ job: { slug: code }, score: 72 }],
+          },
+        ]);
+        prismaMock.sessionAnswer.findMany.mockResolvedValue(fakeAnswers);
+        aiMock.generatePersonalizedSheet.mockResolvedValue(null);
+
+        const result = await service.getPersonalizedSheet(code, sessionId);
+
+        expect(result).toBeNull();
+        expect(prismaMock.refinedBatch.update).not.toHaveBeenCalled();
+      });
     });
 
     it('retourne null sans stocker si IA est indisponible', async () => {
