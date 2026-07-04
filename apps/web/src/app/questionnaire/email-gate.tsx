@@ -21,8 +21,6 @@ import { apiPost } from "@/lib/api";
 type Props = {
   /** ID de la session questionnaire (transmis à l'API). */
   sessionId: string;
-  /** Nombre total de matches à afficher (pour le teaser). */
-  matchCount: number;
   /**
    * Callback déclenché à la fin de l'écran.
    * @param hasEmail true si l'email a été capturé avec succès,
@@ -39,7 +37,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function EmailGate({
   sessionId,
-  matchCount,
   onComplete,
 }: Props) {
   const [email, setEmail] = useState("");
@@ -86,10 +83,11 @@ export default function EmailGate({
           <Target className="size-8 text-accent-ink" strokeWidth={1.7} />
         </div>
         <h1 className="mt-4 font-serif text-3xl tracking-tight">
-          Tes {matchCount} pistes métiers sont prêtes
+          Tes premières pistes métiers sont prêtes
         </h1>
         <p className="mt-2 text-ink-soft">
-          Reçois-les par email pour y revenir tranquillement plus tard.
+          Reçois ton portrait et tes résultats par email pour y revenir
+          tranquillement plus tard.
         </p>
       </div>
 
