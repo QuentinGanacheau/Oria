@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Space_Grotesk } from "next/font/google";
+import { AnalyticsProvider } from "@/components/analytics-provider";
 import "./globals.css";
 
 const serif = Instrument_Serif({
@@ -40,7 +41,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <AnalyticsProvider />
+        {children}
+      </body>
     </html>
   );
 }
