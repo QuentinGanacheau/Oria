@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Clock, Loader2, Sparkles, X } from "lucide-react";
 import { apiPost } from "@/lib/api";
 import { saveSession, type StoredPortrait } from "@/lib/storage";
+import { track } from "@/lib/analytics";
 import ThemeToggle from "@/components/theme-toggle";
 import EmailGate from "./email-gate";
 import PortraitScreen from "./portrait-screen";
@@ -153,6 +154,7 @@ export default function QuestionnairePage() {
         setComplete(data.complete);
         setQuestion(data.question);
         setProgress(data.progress);
+        track({ name: "questionnaire_step_completed", step: payload.questionKey });
         if (data.complete) {
           if (finishLock.current) return;
           finishLock.current = true;
@@ -165,6 +167,10 @@ export default function QuestionnairePage() {
             );
             // On ne redirige plus directement : on affiche l'écran de capture
             // email entre le match et l'arrivée sur /resultats.
+            track({
+              name: "questionnaire_completed",
+              track: nextAnswers.situation,
+            });
             setPendingMatch(matchData);
           } catch (matchErr) {
             // Le matching a échoué (IA indisponible) — on reste sur la page
@@ -253,7 +259,9 @@ export default function QuestionnairePage() {
    */
   const onEmailComplete = useCallback((hasEmail: boolean) => {
     hasEmailRef.current = hasEmail;
+    if (hasEmail) track({ name: "email_captured" });
     setPostFlowStep("portrait");
+    track({ name: "portrait_viewed" });
   }, []);
 
   /**
@@ -320,6 +328,7 @@ export default function QuestionnairePage() {
         setComplete(start.complete);
         setQuestion(start.question);
         setProgress(start.progress);
+        track({ name: "questionnaire_started" });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erreur réseau");
       } finally {
@@ -544,7 +553,6 @@ export default function QuestionnairePage() {
           {pendingMatch && !aiError && postFlowStep === "email" && (
             <EmailGate
               sessionId={pendingMatch.sessionId}
-              matchCount={pendingMatch.matches.length}
               onComplete={onEmailComplete}
             />
           )}

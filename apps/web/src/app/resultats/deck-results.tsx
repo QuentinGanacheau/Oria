@@ -17,6 +17,7 @@ import {
   type StoredSession,
 } from "@/lib/storage";
 import { seedDevSession } from "@/lib/dev-seed";
+import { track } from "@/lib/analytics";
 import AlertBanner from "@/components/alert-banner";
 import InlineEmailCapture from "./inline-email-capture";
 import SessionRestore from "./session-restore";
@@ -125,6 +126,7 @@ export default function DeckResults() {
     const s = loadSession();
     setSession(s);
     if (s) setRoundIndex(computeInitialRound(s));
+    track({ name: "results_viewed" });
   }, []);
 
   // ── Stripe configuré côté API ? ────────────────────────────────
@@ -163,6 +165,7 @@ export default function DeckResults() {
   const fetchNextBatch = useCallback(
     async (s: StoredSession, probeAnswer?: string) => {
       setScreen({ kind: "fetching" });
+      track({ name: "refine_triggered" });
       try {
         const result = await apiPost<{
           batchNumber: number;
@@ -188,6 +191,7 @@ export default function DeckResults() {
         };
         const newBatches = [...(s.batches ?? []), newBatch];
         persist({ ...s, batches: newBatches, hasMore: result.hasMore });
+        track({ name: "refine_completed" });
 
         // Affiche l'insight quelques secondes puis bascule sur le nouveau tour.
         setScreen({ kind: "inter-batch", insight: result.insight });
@@ -257,6 +261,7 @@ export default function DeckResults() {
           `/v1/billing/session?session_id=${encodeURIComponent(stripeSessionId)}`,
         );
         if (r.paid) {
+          if (!isUnlocked()) track({ name: "payment_completed" });
           setUnlocked();
           const updated = { ...session, hasEmail: true };
           persist(updated);
@@ -281,6 +286,7 @@ export default function DeckResults() {
       // Tour 0 (gratuit) fini sans paiement → paywall.
       if (roundIndex === 0 && !unlocked) {
         setScreen({ kind: "paywall" });
+        track({ name: "paywall_viewed" });
         return;
       }
       // Backend a déjà dit qu'il n'y avait plus de paquets dispo.
@@ -329,6 +335,7 @@ export default function DeckResults() {
           `/v1/billing/session?session_id=${encodeURIComponent(stripeSessionId)}`,
         );
         if (r.paid) {
+          if (!isUnlocked()) track({ name: "payment_completed" });
           setUnlocked();
           const updated: StoredSession = { ...session, hasEmail: true };
           persist(updated);
@@ -357,6 +364,8 @@ export default function DeckResults() {
       const s = sessionRef.current;
       if (!s) return;
       const rating: "like" | "dislike" | "neutral" = direction;
+      if (rating === "like") track({ name: "job_liked", jobSlug: slug });
+      if (rating === "dislike") track({ name: "job_disliked", jobSlug: slug });
       const p = apiPost(`/v1/questionnaire/${s.sessionId}/rate`, {
         jobSlug: slug,
         rating,
@@ -384,6 +393,7 @@ export default function DeckResults() {
   const onCheckout = useCallback(async () => {
     if (!session) return;
     setCheckoutLoading(true);
+    track({ name: "payment_initiated" });
     try {
       const res = await apiPost<{ url: string }>(
         "/v1/billing/checkout/full-report",
@@ -418,6 +428,7 @@ export default function DeckResults() {
   const onOpenSheet = useCallback(
     (slug: string) => {
       if (!session) return;
+      track({ name: "job_sheet_opened", jobSlug: slug });
 
       // Cherche d'abord dans les matches initiaux (passe gratuite)
       const initialIdx = session.matches.findIndex((m) => m.job.slug === slug);
