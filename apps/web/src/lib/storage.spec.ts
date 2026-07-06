@@ -5,7 +5,7 @@ import {
   isUnlocked,
   setUnlocked,
   STORAGE_KEY,
-  UNLOCK_KEY,
+  UNLOCK_PREFIX,
   type StoredSession,
 } from './storage';
 
@@ -88,24 +88,36 @@ describe('storage', () => {
   // ── isUnlocked ───────────────────────────────────────────────────────────
 
   describe('isUnlocked', () => {
-    it('retourne false quand le rapport na pas encore ete debloque', () => {
+    it('retourne false quand la session na pas ete debloquee', () => {
+      expect(isUnlocked('sess-a')).toBe(false);
+    });
+
+    it('retourne false sans sessionId', () => {
       expect(isUnlocked()).toBe(false);
     });
 
-    it('retourne true apres un appel a setUnlocked()', () => {
-      setUnlocked();
+    it('retourne true apres un appel a setUnlocked() pour la meme session', () => {
+      setUnlocked('sess-a');
 
-      expect(isUnlocked()).toBe(true);
+      expect(isUnlocked('sess-a')).toBe(true);
+    });
+
+    it('reste cloisonne par session : debloquer sess-a ne debloque pas sess-b', () => {
+      setUnlocked('sess-a');
+
+      // Regression : un flag global laissait une 2e session gratuite se croire
+      // payee -> paywall court-circuite puis 400 sur /next-batch.
+      expect(isUnlocked('sess-b')).toBe(false);
     });
   });
 
   // ── setUnlocked ──────────────────────────────────────────────────────────
 
   describe('setUnlocked', () => {
-    it('persiste la cle de deverrouillage en localStorage', () => {
-      setUnlocked();
+    it('persiste la cle de deverrouillage par session en localStorage', () => {
+      setUnlocked('sess-a');
 
-      expect(localStorage.getItem(UNLOCK_KEY)).toBe('1');
+      expect(localStorage.getItem(`${UNLOCK_PREFIX}_sess-a`)).toBe('1');
     });
   });
 });

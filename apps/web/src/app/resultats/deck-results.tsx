@@ -254,15 +254,15 @@ export default function DeckResults() {
   // après le persist() qui suit (session change → deps change → re-run).
   useEffect(() => {
     const stripeSessionId = searchParams.get("session_id");
-    if (!stripeSessionId || !session || isUnlocked()) return;
+    if (!stripeSessionId || !session || isUnlocked(session.sessionId)) return;
     void (async () => {
       try {
         const r = await apiGet<{ paid: boolean }>(
           `/v1/billing/session?session_id=${encodeURIComponent(stripeSessionId)}`,
         );
         if (r.paid) {
-          if (!isUnlocked()) track({ name: "payment_completed" });
-          setUnlocked();
+          if (!isUnlocked(session.sessionId)) track({ name: "payment_completed" });
+          setUnlocked(session.sessionId);
           const updated = { ...session, hasEmail: true };
           persist(updated);
           await startNextBatch(updated);
@@ -282,7 +282,7 @@ export default function DeckResults() {
       await Promise.all(pendingRates.current);
       pendingRates.current = [];
 
-      const unlocked = isUnlocked();
+      const unlocked = isUnlocked(s.sessionId);
       // Tour 0 (gratuit) fini sans paiement → paywall.
       if (roundIndex === 0 && !unlocked) {
         setScreen({ kind: "paywall" });
@@ -335,8 +335,8 @@ export default function DeckResults() {
           `/v1/billing/session?session_id=${encodeURIComponent(stripeSessionId)}`,
         );
         if (r.paid) {
-          if (!isUnlocked()) track({ name: "payment_completed" });
-          setUnlocked();
+          if (!isUnlocked(session.sessionId)) track({ name: "payment_completed" });
+          setUnlocked(session.sessionId);
           const updated: StoredSession = { ...session, hasEmail: true };
           persist(updated);
           setVerifyMsg(

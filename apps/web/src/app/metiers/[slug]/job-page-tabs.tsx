@@ -159,7 +159,7 @@ function JobPageTabsInner({ job }: { job: Job }) {
   const rank = searchParams.get("rank")
     ? parseInt(searchParams.get("rank")!, 10)
     : null;
-  const unlocked = isUnlocked();
+  const unlocked = isUnlocked(sessionId);
 
   // Contenu verrouillé = rank > 1 et pas payé → on ouvre sur "Mon analyse"
   // pour que le paywall soit visible dès l'arrivée sur la page.
