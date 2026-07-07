@@ -18,8 +18,6 @@ export type ResultsTemplateData = {
   }>;
   /** Lien direct vers la page de résultats avec le sessionId pré-rempli. */
   resultsUrl: string;
-  /** Total de métiers correspondants (pour teaser le rapport complet). */
-  totalMatches: number;
 };
 
 /**
@@ -41,7 +39,7 @@ export function buildResultsEmail(data: ResultsTemplateData): {
   html: string;
   text: string;
 } {
-  const { topMatches, resultsUrl, totalMatches } = data;
+  const { topMatches, resultsUrl } = data;
 
   const matchesHtml = topMatches
     .map(
@@ -109,13 +107,9 @@ export function buildResultsEmail(data: ResultsTemplateData): {
           <tr>
             <td style="padding: 0 32px 32px 32px; background: #ffffff; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; text-align: center;">
               <a href="${resultsUrl}" style="display: inline-block; padding: 14px 28px; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; border-radius: 999px;">
-                Voir tous mes résultats →
+                Explorer mes métiers →
               </a>
-              ${
-                totalMatches > 3
-                  ? `<p style="margin: 16px 0 0 0; color: #64748b; font-size: 13px;">${totalMatches - 3} autres métiers t'attendent dans ton rapport complet.</p>`
-                  : ''
-              }
+              <p style="margin: 16px 0 0 0; color: #64748b; font-size: 13px;">Swipe tes métiers, puis débloque de nouvelles séries affinées à chaque fois selon tes préférences.</p>
             </td>
           </tr>
 
@@ -150,8 +144,10 @@ On a analysé tes réponses. Voici les 3 métiers qui collent le mieux à ton pr
 
 ${textMatches}
 
-Voir tous mes résultats : ${resultsUrl}
-${totalMatches > 3 ? `\n${totalMatches - 3} autres métiers t'attendent dans ton rapport complet.\n` : ''}
+Explorer mes métiers : ${resultsUrl}
+
+Swipe tes métiers, puis débloque de nouvelles séries affinées à chaque fois selon tes préférences.
+
 ---
 Tu reçois cet email car tu as complété le questionnaire Oryam.
 Une question ? Réponds simplement à cet email.`;

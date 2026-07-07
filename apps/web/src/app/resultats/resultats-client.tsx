@@ -69,9 +69,9 @@ export default function ResultatsClient() {
           `/v1/billing/session?session_id=${encodeURIComponent(stripeSessionId)}`,
         );
         if (r.paid) {
-          setUnlocked();
           // Met à jour hasEmail en localStorage si besoin (session payée = email garanti)
           const current = loadSession();
+          if (current) setUnlocked(current.sessionId);
           if (current && !current.hasEmail) {
             setSession({ ...current, hasEmail: true });
           }
@@ -88,7 +88,7 @@ export default function ResultatsClient() {
     })();
   }, [searchParams]);
 
-  const unlocked = isUnlocked();
+  const unlocked = isUnlocked(session?.sessionId);
 
   /**
    * Met à jour la note d'un métier en localStorage et dans le state.

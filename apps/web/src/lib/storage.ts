@@ -103,22 +103,34 @@ export function saveSession(data: Omit<StoredSession, "savedAt">) {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
-export const UNLOCK_KEY = "fyj_unlock_paid";
+/** Préfixe de clé localStorage — le déverrouillage est stocké PAR session. */
+export const UNLOCK_PREFIX = "fyj_unlock_paid";
 
-/**
- * Retourne true si l'utilisateur a débloqué le rapport complet.
- *
- * Deux sources possibles :
- *  1. NEXT_PUBLIC_DEV_UNLOCK=true dans .env.local → déverrouillage automatique
- *     en développement, sans passer par Stripe. Ne jamais mettre en prod.
- *  2. localStorage "fyj_unlock_paid" = "1" → déverrouillé après paiement Stripe.
- */
-export function isUnlocked(): boolean {
-  if (typeof window === "undefined") return false;
-  if (process.env.NEXT_PUBLIC_DEV_UNLOCK === "true") return true;
-  return localStorage.getItem(UNLOCK_KEY) === "1";
+/** Clé localStorage du déverrouillage d'une session donnée. */
+function unlockKey(sessionId: string): string {
+  return `${UNLOCK_PREFIX}_${sessionId}`;
 }
 
-export function setUnlocked() {
-  localStorage.setItem(UNLOCK_KEY, "1");
+/**
+ * Retourne true si le rapport complet est débloqué POUR CETTE session.
+ *
+ * Le déverrouillage est volontairement par session (et non global) : le
+ * paiement Stripe débloque une `QuestionnaireSession` précise côté backend
+ * (`isPaid`). Un flag global laisserait une 2e session gratuite se croire
+ * payée → paywall court-circuité puis 400 sur /next-batch.
+ *
+ * Deux sources :
+ *  1. NEXT_PUBLIC_DEV_UNLOCK=true → déverrouillage dev, sans Stripe. Jamais en prod.
+ *  2. localStorage "fyj_unlock_paid_<sessionId>" = "1" → après paiement Stripe.
+ */
+export function isUnlocked(sessionId?: string | null): boolean {
+  if (typeof window === "undefined") return false;
+  if (process.env.NEXT_PUBLIC_DEV_UNLOCK === "true") return true;
+  if (!sessionId) return false;
+  return localStorage.getItem(unlockKey(sessionId)) === "1";
+}
+
+export function setUnlocked(sessionId: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(unlockKey(sessionId), "1");
 }

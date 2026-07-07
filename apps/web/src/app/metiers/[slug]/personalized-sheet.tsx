@@ -318,7 +318,7 @@ export default function PersonalizedSheetSection({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("analyse");
 
-  const unlocked = isUnlocked();
+  const unlocked = isUnlocked(sessionId);
   const canView = !!sessionId && (rank === 1 || unlocked);
 
   const load = useCallback(() => {

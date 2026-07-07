@@ -182,18 +182,15 @@ export class BillingService {
       stripeSession.metadata?.questionnaireSessionId ?? null;
 
     let to: string | null = null;
-    let totalMatches = 0;
 
     if (questionnaireSessionId) {
       const dbSession = await this.prisma.questionnaireSession.findUnique({
         where: { id: questionnaireSessionId },
         select: {
           email: true,
-          _count: { select: { matches: true } },
         },
       });
       to = dbSession?.email ?? null;
-      totalMatches = dbSession?._count.matches ?? 0;
     }
 
     // Fallback sur l'email collecté par Stripe au checkout
@@ -222,7 +219,6 @@ export class BillingService {
       to,
       amountTotalCents: stripeSession.amount_total ?? 0,
       currency: stripeSession.currency ?? 'eur',
-      totalMatches,
     });
   }
 }

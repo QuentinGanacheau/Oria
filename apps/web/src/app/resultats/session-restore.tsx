@@ -84,8 +84,8 @@ export default function SessionRestore({ sessionId, onRestored }: Props) {
       });
 
       // Restaure le statut "débloqué" si l'utilisateur avait payé
-      if (data.isPaid && !isUnlocked()) {
-        setUnlocked();
+      if (data.isPaid && !isUnlocked(data.sessionId)) {
+        setUnlocked(data.sessionId);
       }
 
       onRestored();
