@@ -6,12 +6,12 @@ export const metadata = {
 
 export default function CGV() {
   return (
-    <LegalLayout title="Conditions Générales de Vente" lastUpdated="[DATE DE MISE EN LIGNE]">
+    <LegalLayout title="Conditions Générales de Vente" lastUpdated="03/07/2026">
 
       <h2>1. Objet</h2>
       <p>
         Les présentes Conditions Générales de Vente (CGV) régissent les ventes de services
-        numériques réalisées par <strong>[NOM OU RAISON SOCIALE]</strong> (ci-après
+        numériques réalisées par <strong>Qgstudio</strong> (ci-après
         &laquo;&nbsp;le Vendeur&nbsp;&raquo;) via le site Oryam, à destination de tout
         utilisateur souhaitant accéder au rapport d&apos;orientation complet
         (ci-après &laquo;&nbsp;le Client&nbsp;&raquo;).
@@ -23,24 +23,29 @@ export default function CGV() {
       <h2>2. Description du service payant</h2>
       <p>
         Le rapport complet (&laquo;&nbsp;Oryam — Rapport complet&nbsp;&raquo;) est un
-        contenu numérique personnalisé comprenant :
+        contenu numérique personnalisé, débloqué par un paiement unique, comprenant :
       </p>
       <ul>
-        <li>L&apos;intégralité du classement des métiers correspondant au profil de l&apos;utilisateur ;</li>
+        <li>
+          De nouvelles séries de métiers proposées au-delà des premières pistes gratuites,
+          affinées à chaque série par intelligence artificielle en fonction des préférences
+          exprimées par l&apos;utilisateur (métiers retenus ou écartés) ;
+        </li>
         <li>
           Pour chaque métier : une analyse personnalisée (points forts, points de vigilance,
-          prochaines étapes concrètes, journée type) générée par intelligence artificielle à partir
-          des réponses au questionnaire.
+          plan d&apos;action — formations éligibles au CPF, fourchette de salaire, premières
+          étapes) générée par intelligence artificielle à partir des réponses au questionnaire.
         </li>
       </ul>
       <p>
         Le service est accessible immédiatement après le paiement, depuis l&apos;appareil utilisé
-        lors de la commande, sans limitation de durée.
+        lors de la commande. Les résultats restent consultables pendant une durée d&apos;un (1) an
+        à compter de la commande.
       </p>
 
       <h2>3. Prix</h2>
       <p>
-        Le prix du rapport complet est de <strong>[PRIX] € TTC</strong>, paiement unique.
+        Le prix du rapport complet est de <strong>5,90 € TTC</strong>, paiement unique.
         Aucun abonnement ni frais récurrents ne sont prélevés.
       </p>
       <p>
@@ -89,16 +94,23 @@ export default function CGV() {
       <p>
         Pour toute réclamation ou demande relative à une commande, le Client peut contacter le
         service client à l&apos;adresse email :{" "}
-        <a href="mailto:[EMAIL SUPPORT]"><strong>[EMAIL SUPPORT]</strong></a>.
+        <a href="mailto:qgstudio.pro@gmail.com"><strong>qgstudio.pro@gmail.com</strong></a>.
       </p>
       <p>
         Le Vendeur s&apos;engage à répondre dans un délai de <strong>5 jours ouvrés</strong>.
       </p>
+      {/*
+        TODO (obligatoire avant ouverture des ventes B2C) : mention du médiateur de la
+        consommation — obligatoire pour toute vente à des particuliers (art. L.612-1 du
+        Code de la consommation). Souscrire à un médiateur agréé (ex. CM2C, Medicys,
+        SAS Médiation Solution) puis réactiver le paragraphe ci-dessous avec son nom et son URL.
+
       <p>
         En cas de litige non résolu à l&apos;amiable, le Client peut recourir à la médiation de la
         consommation. Le Vendeur adhère au service de médiation :{" "}
         <strong>[NOM DU MÉDIATEUR]</strong> — <a href="[URL MÉDIATEUR]" target="_blank" rel="noopener noreferrer">[URL MÉDIATEUR]</a>.
       </p>
+      */}
 
       <h2>8. Responsabilité</h2>
       <p>

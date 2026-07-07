@@ -91,7 +91,6 @@ export class EmailService {
 
     const { subject, html, text } = buildResultsEmail({
       topMatches: top3,
-      totalMatches: input.matches.length,
       resultsUrl,
     });
 
@@ -161,7 +160,6 @@ export class EmailService {
     to: string;
     amountTotalCents: number;
     currency: string;
-    totalMatches: number;
   }): Promise<boolean> {
     if (!this.resend) {
       await this.logEmail({
@@ -197,7 +195,6 @@ export class EmailService {
       resultsUrl: paymentResultsUrl,
       amountTotalCents: input.amountTotalCents,
       currency: input.currency,
-      totalMatches: input.totalMatches,
     });
 
     try {

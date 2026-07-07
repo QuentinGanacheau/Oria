@@ -18,8 +18,6 @@ export type PaymentTemplateData = {
   amountTotalCents: number;
   /** Devise ISO 4217 (ex: "eur"). */
   currency: string;
-  /** Total de métiers maintenant accessibles (le user a débloqué tout le rapport). */
-  totalMatches: number;
 };
 
 /**
@@ -39,7 +37,7 @@ export function buildPaymentEmail(data: PaymentTemplateData): {
   html: string;
   text: string;
 } {
-  const { resultsUrl, amountTotalCents, currency, totalMatches } = data;
+  const { resultsUrl, amountTotalCents, currency } = data;
   const formattedAmount = formatAmount(amountTotalCents, currency);
 
   const html = `<!DOCTYPE html>
@@ -100,8 +98,9 @@ export function buildPaymentEmail(data: PaymentTemplateData): {
                 Ce que tu débloques :
               </h3>
               <ul style="margin: 0; padding: 0 0 0 20px; color: #475569; font-size: 14px; line-height: 1.8;">
-                <li>L&apos;intégralité du classement (${totalMatches} métiers)</li>
-                <li>L&apos;explication personnalisée pour chaque métier</li>
+                <li>De nouvelles séries de métiers, affinées à chaque fois selon tes coups de cœur</li>
+                <li>Une question d&apos;affinage entre chaque série pour cibler ce qui te correspond vraiment</li>
+                <li>Une explication personnalisée pour chaque métier</li>
                 <li>L&apos;accès permanent depuis cet appareil</li>
               </ul>
             </td>
@@ -143,8 +142,9 @@ Merci ! Ton rapport complet est débloqué.
 Montant payé : ${formattedAmount}
 
 Ce que tu débloques :
-- L'intégralité du classement (${totalMatches} métiers)
-- L'explication personnalisée pour chaque métier
+- De nouvelles séries de métiers, affinées à chaque fois selon tes coups de cœur
+- Une question d'affinage entre chaque série pour cibler ce qui te correspond vraiment
+- Une explication personnalisée pour chaque métier
 - L'accès permanent depuis cet appareil
 
 Accéder à tes résultats : ${resultsUrl}
