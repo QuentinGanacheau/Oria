@@ -22,6 +22,17 @@ export const metadata: Metadata = {
   title: "Oryam — Métiers qui te ressemblent",
   description:
     "Questionnaire dynamique et fiches métiers. SaaS d’orientation et de reconversion professionnelle.",
+  manifest: "/site.webmanifest",
+  icons: {
+    // On n'expose pas le favicon.svg (1,1 Mo : image raster embarquée) —
+    // le PNG 96×96 (8 Ko) suffit largement pour l'onglet du navigateur.
+    icon: [{ url: "/favicon-96x96.png", type: "image/png", sizes: "96x96" }],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: {
+    title: "Oryam",
+  },
 };
 
 // Anti-FOUC : applique le thème stocké (clé `fyj-mode`) avant le premier paint.
