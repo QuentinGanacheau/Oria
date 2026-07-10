@@ -1,3 +1,5 @@
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -20,7 +22,10 @@ async function bootstrap() {
       const isAllowed =
         allowedOrigins.includes(origin) ||
         /\.vercel\.app$/.test(new URL(origin).hostname);
-      callback(isAllowed ? null : new Error(`CORS bloqué : ${origin}`), isAllowed);
+      callback(
+        isAllowed ? null : new Error(`CORS bloqué : ${origin}`),
+        isAllowed,
+      );
     },
     credentials: true,
   });
