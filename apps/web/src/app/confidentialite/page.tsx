@@ -6,7 +6,7 @@ export const metadata = {
 
 export default function Confidentialite() {
   return (
-    <LegalLayout title="Politique de confidentialité" lastUpdated="03/07/2026">
+    <LegalLayout title="Politique de confidentialité" lastUpdated="10/07/2026">
       <p>
         La présente politique décrit comment <strong>Qgstudio</strong>, éditeur
         du site Oryam (ci-après &laquo;&nbsp;nous&nbsp;&raquo;), collecte,
@@ -64,12 +64,27 @@ export default function Confidentialite() {
         appareil et ne sont pas transmises à des tiers.
       </p>
 
-      <h3>2.4 Données techniques</h3>
+      <h3>2.4 Données techniques et détection d&apos;erreurs</h3>
       <p>
         Comme tout serveur web, le nôtre peut enregistrer des données techniques
-        lors de vos requêtes (adresse IP, horodatage, chemin consulté). Ces
-        données sont utilisées uniquement à des fins de sécurité et de débogage,
-        et ne sont pas croisées avec votre identité.
+        lors de vos requêtes (adresse IP, horodatage, chemin consulté). En cas
+        d&apos;erreur applicative, un rapport technique (message d&apos;erreur,
+        page concernée, type de navigateur) est transmis à{" "}
+        <strong>Sentry</strong> afin de diagnostiquer et corriger le problème.
+        Ces données servent uniquement à la sécurité et à la fiabilité du
+        service.
+      </p>
+
+      <h3>2.5 Mesure d&apos;audience et enregistrement de sessions</h3>
+      <p>
+        Nous utilisons <strong>PostHog</strong> pour comprendre comment le site
+        est utilisé et l&apos;améliorer : pages visitées, progression dans le
+        questionnaire, interactions avec les résultats. PostHog enregistre
+        également des <strong>sessions de navigation</strong> (reproduction
+        anonymisée de vos actions à l&apos;écran). Les champs de saisie (email,
+        réponses en texte libre) sont <strong>masqués</strong> et ne sont jamais
+        enregistrés en clair. Ces données sont hébergées dans l&apos;Union
+        européenne.
       </p>
 
       <h2>3. Finalités et bases légales du traitement</h2>
@@ -94,8 +109,14 @@ export default function Confidentialite() {
             <td>Exécution du service (intérêt légitime)</td>
           </tr>
           <tr>
-            <td>Sécurité et débogage technique</td>
+            <td>Sécurité, détection et correction des erreurs (Sentry)</td>
             <td>Intérêt légitime</td>
+          </tr>
+          <tr>
+            <td>
+              Mesure d&apos;audience et enregistrement de sessions (PostHog)
+            </td>
+            <td>Consentement</td>
           </tr>
         </tbody>
       </table>
@@ -116,6 +137,12 @@ export default function Confidentialite() {
           <strong>Logs techniques :</strong> conservés{" "}
           <strong>30 jours</strong> glissants.
         </li>
+        <li>
+          <strong>Données de mesure d&apos;audience et d&apos;erreurs :</strong>{" "}
+          conservées par PostHog et Sentry selon leur configuration (de
+          l&apos;ordre de quelques mois), à des fins d&apos;analyse statistique
+          et de correction des dysfonctionnements.
+        </li>
       </ul>
 
       <h2>5. Sous-traitants et transferts de données</h2>
@@ -135,6 +162,21 @@ export default function Confidentialite() {
           <strong>Railway Corporation</strong> (hébergement applicatif et base
           de données) — données traitées aux États-Unis, couvertes par les
           clauses contractuelles types de la Commission européenne.
+        </li>
+        <li>
+          <strong>PostHog</strong> (mesure d&apos;audience et enregistrement de
+          sessions) — données hébergées dans l&apos;Union européenne (région
+          EU).
+        </li>
+        <li>
+          <strong>Sentry</strong> (détection et suivi des erreurs) — données
+          hébergées dans l&apos;Union européenne (Allemagne).
+        </li>
+        <li>
+          <strong>Resend</strong> (envoi des emails de résultats et de
+          confirmation de paiement) — données traitées aux États-Unis,
+          couvertes par les clauses contractuelles types de la Commission
+          européenne.
         </li>
         <li>
           <strong>Mistral AI</strong> (génération de contenu par IA) — société
@@ -196,14 +238,26 @@ export default function Confidentialite() {
         .
       </p>
 
-      <h2>7. Cookies et stockage local</h2>
+      <h2>7. Cookies et traceurs</h2>
       <p>
-        Ce site n&apos;utilise pas de cookies de traçage ou publicitaires. Le
-        stockage local du navigateur (<em>localStorage</em>,{" "}
-        <em>sessionStorage</em>) est utilisé uniquement pour le bon
-        fonctionnement du service (conservation des résultats entre les pages,
-        état du déverrouillage). Vous pouvez les supprimer à tout moment depuis
-        les paramètres de votre navigateur.
+        <strong>Traceurs strictement nécessaires :</strong> le stockage local du
+        navigateur (<em>localStorage</em>, <em>sessionStorage</em>) est utilisé
+        pour le bon fonctionnement du service (conservation des résultats entre
+        les pages, état du déverrouillage). Indispensable au service, il ne
+        requiert pas de consentement.
+      </p>
+      <p>
+        <strong>Traceurs de mesure d&apos;audience :</strong> PostHog dépose des
+        traceurs permettant d&apos;analyser l&apos;utilisation du site et
+        d&apos;enregistrer des sessions de navigation anonymisées, à des fins
+        d&apos;amélioration du produit. Nous n&apos;utilisons{" "}
+        <strong>aucun cookie publicitaire</strong> et ne cédons aucune donnée à
+        des fins commerciales.
+      </p>
+      <p>
+        Vous pouvez à tout moment supprimer ces traceurs depuis les paramètres
+        de votre navigateur, ou vous opposer au suivi via les réglages de
+        confidentialité de celui-ci (signal « Do Not Track »).
       </p>
 
       <h2>8. Sécurité</h2>
