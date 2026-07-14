@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Building2, Coins } from "lucide-react";
@@ -6,7 +7,16 @@ import JobPageTabs from "./job-page-tabs";
 import ScoreRing from "./score-ring";
 import SaveButton from "./save-button";
 
-export const dynamic = "force-dynamic";
+// ISR à la demande : aucune fiche n'est générée au build (generateStaticParams
+// renvoie []), chaque métier est rendu au 1er hit puis mis en cache et revalidé
+// toutes les heures. Évite ~1584 appels API au build et garde des pages
+// statiques cacheables (bon pour le crawl et le TTFB).
+export const revalidate = 3600;
+export const dynamicParams = true;
+
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 type RecruitmentLevel = "high" | "medium" | "low" | null;
 
@@ -42,6 +52,8 @@ function recruitmentMeta(level: RecruitmentLevel) {
   }
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oryam.fr";
+
 async function fetchJob(slug: string): Promise<Job> {
   const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
   const res = await fetch(`${base}/v1/jobs/${slug}`, {
@@ -52,12 +64,82 @@ async function fetchJob(slug: string): Promise<Job> {
   return res.json() as Promise<Job>;
 }
 
-export default async function MetierPage({ params }: { params: Promise<{ slug: string }> }) {
+/**
+ * SEO par fiche : title/description uniques dérivés du métier ROME.
+ * `fetchJob` est mémoïsé par Next (même URL + revalidate) → pas de requête
+ * supplémentaire par rapport au rendu de la page.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
   const job = await fetchJob(slug);
 
+  const title = `${job.title} — fiche métier, missions, salaire et formations`;
+  // Description ≤ ~160 caractères pour éviter la troncature SERP.
+  const raw = job.summary || job.tagline || `Découvre le métier ${job.title}.`;
+  const description = raw.length > 158 ? `${raw.slice(0, 155).trimEnd()}…` : raw;
+  const url = `/metiers/${job.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      title,
+      description,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
+
+export default async function MetierPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const job = await fetchJob(slug);
+  const url = `${SITE_URL}/metiers/${job.slug}`;
+
+  // Données structurées : Occupation (le code ROME sert d'occupationalCategory)
+  // + fil d'Ariane. Éligible aux rich results Google.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Occupation",
+        name: job.title,
+        description: job.summary || job.tagline || undefined,
+        occupationalCategory: job.slug,
+        skills: job.skills.length > 0 ? job.skills.join(", ") : undefined,
+        url,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Accueil", item: `${SITE_URL}/` },
+          { "@type": "ListItem", position: 2, name: "Métiers", item: `${SITE_URL}/metiers` },
+          { "@type": "ListItem", position: 3, name: job.title, item: url },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-paper text-ink">
+      {/* Données structurées (JSON-LD). `<` échappe un éventuel "<" dans les
+          champs métier pour empêcher toute fermeture prématurée du <script>. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       {/* ── Topbar ───────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
