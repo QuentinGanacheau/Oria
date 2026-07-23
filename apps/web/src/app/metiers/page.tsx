@@ -3,8 +3,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ThemeToggle from "@/components/theme-toggle";
 
-// Index statique revalidé toutes les heures : la liste ROME bouge rarement.
-export const revalidate = 3600;
+// Rendu dynamique volontaire : la page ne doit PAS être prérendue au build.
+// Sinon un simple hoquet de l'API au moment du build Vercel fait échouer tout
+// le déploiement. Ici le HTML est rendu à la requête, mais l'appel à /v1/jobs
+// garde son propre cache de données (fetch revalidate 3600 ci-dessous) — donc
+// le coût réel reste minime. La liste ROME bouge rarement.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Tous les métiers — annuaire des fiches métier",
@@ -22,11 +26,25 @@ export const metadata: Metadata = {
 
 type JobListItem = { slug: string; title: string; tagline: string };
 
+/**
+ * Récupère la liste des métiers. En cas d'indisponibilité de l'API on renvoie
+ * un tableau vide (dégradation propre) plutôt que de jeter : la page rend alors
+ * un état « liste momentanément indisponible » au lieu de casser le rendu.
+ * Le fetch garde son cache de données (revalidate 3600) même en page dynamique.
+ */
 async function fetchJobs(): Promise<JobListItem[]> {
   const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
-  const res = await fetch(`${base}/v1/jobs`, { next: { revalidate } });
-  if (!res.ok) throw new Error("Liste des métiers indisponible");
-  return res.json() as Promise<JobListItem[]>;
+  try {
+    const res = await fetch(`${base}/v1/jobs`, { next: { revalidate: 3600 } });
+    if (!res.ok) {
+      console.error(`[/metiers] API /v1/jobs a répondu ${res.status}`);
+      return [];
+    }
+    return (await res.json()) as JobListItem[];
+  } catch (err) {
+    console.error("[/metiers] échec de l'appel à /v1/jobs", err);
+    return [];
+  }
 }
 
 /**
@@ -45,6 +63,41 @@ function initialOf(title: string): string {
 
 export default async function MetiersIndexPage() {
   const jobs = await fetchJobs();
+
+  // Dégradation propre : si l'API est momentanément indisponible, on rend une
+  // page valide (pas de 500, pas d'index vide trompeur) invitant à réessayer.
+  if (jobs.length === 0) {
+    return (
+      <div className="min-h-screen bg-paper text-ink">
+        <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
+          <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-75"
+            >
+              <ArrowLeft className="size-4" /> Accueil
+            </Link>
+            <ThemeToggle />
+          </div>
+        </div>
+        <main className="mx-auto max-w-[920px] px-6 py-24 text-center">
+          <h1 className="font-serif text-[clamp(28px,4vw,40px)] leading-tight tracking-tight">
+            Annuaire momentanément indisponible
+          </h1>
+          <p className="mx-auto mt-4 max-w-[48ch] text-lg text-ink-soft">
+            La liste des métiers n'a pas pu être chargée. Réessaie dans un instant,
+            ou lance directement le test pour découvrir les métiers qui te ressemblent.
+          </p>
+          <Link
+            href="/questionnaire"
+            className="mt-8 inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Faire le test
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   // Regroupement par initiale, tri des groupes et des métiers (locale fr).
   const groups = new Map<string, JobListItem[]>();
