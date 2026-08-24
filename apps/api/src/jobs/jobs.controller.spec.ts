@@ -17,6 +17,9 @@ const buildJobProfile = (slug: string, title: string): JobProfile => ({
   workContext: 'Bureau',
   recruitmentLevel: null,
   offerCount: null,
+  domainCode: 'M',
+  domainLabel: "Support à l'entreprise",
+  domainSlug: 'support-entreprise',
 });
 
 // ─── Mock service ─────────────────────────────────────────────────────────────

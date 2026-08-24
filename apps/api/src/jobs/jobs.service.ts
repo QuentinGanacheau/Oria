@@ -7,6 +7,11 @@ import {
 } from '../ai/ai.service';
 import { deriveUserContext } from '../ai/user-context';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ROME_GRAND_DOMAINS,
+  romeDomainByCode,
+  romeDomainBySlug,
+} from './rome-domains';
 
 /**
  * Représentation d'un métier exposée à l'app et au frontend.
@@ -34,6 +39,29 @@ export type JobProfile = {
   recruitmentLevel: 'high' | 'medium' | 'low' | null;
   /** Nombre d'offres actives relevé à la dernière sync. Null si indisponible. */
   offerCount: number | null;
+  /** Code du grand domaine ROME (A → N), ou null si non renseigné. */
+  domainCode: string | null;
+  /** Libellé d'affichage du grand domaine, ou null. */
+  domainLabel: string | null;
+  /** Slug d'URL du pilier de domaine (`/metiers/domaine/<slug>`), ou null. */
+  domainSlug: string | null;
+};
+
+/** Un grand domaine ROME avec le nombre de métiers qu'il contient. */
+export type DomainSummary = {
+  code: string;
+  slug: string;
+  label: string;
+  count: number;
+};
+
+/** Contenu d'une page pilier : le domaine + ses métiers. */
+export type DomainDetail = {
+  code: string;
+  slug: string;
+  label: string;
+  intro: string;
+  jobs: JobProfile[];
 };
 
 /**
@@ -66,6 +94,49 @@ export class JobsService {
       throw new NotFoundException(`Métier introuvable : ${code}`);
     }
     return this.toJobProfile(job);
+  }
+
+  /**
+   * Liste les 14 grands domaines ROME avec le nombre de métiers de chacun.
+   * Alimente le hub `/metiers` (cartes de domaines). Les domaines vides ou
+   * inconnus (code hors A–N) sont omis.
+   */
+  async listDomains(): Promise<DomainSummary[]> {
+    const grouped = await this.prisma.romeJob.groupBy({
+      by: ['codeGrandDomaine'],
+      _count: { _all: true },
+    });
+    const countByCode = new Map(
+      grouped.map((g) => [g.codeGrandDomaine, g._count._all]),
+    );
+    return ROME_GRAND_DOMAINS.map((d) => ({
+      code: d.code,
+      slug: d.slug,
+      label: d.label,
+      count: countByCode.get(d.code) ?? 0,
+    })).filter((d) => d.count > 0);
+  }
+
+  /**
+   * Retourne le contenu d'une page pilier : le domaine (résolu par son slug
+   * d'URL) et la liste de ses métiers, triés par libellé.
+   */
+  async findByDomainSlug(slug: string): Promise<DomainDetail> {
+    const domain = romeDomainBySlug(slug);
+    if (!domain) {
+      throw new NotFoundException(`Domaine introuvable : ${slug}`);
+    }
+    const jobs = await this.prisma.romeJob.findMany({
+      where: { codeGrandDomaine: domain.code },
+      orderBy: { libelle: 'asc' },
+    });
+    return {
+      code: domain.code,
+      slug: domain.slug,
+      label: domain.label,
+      intro: domain.intro,
+      jobs: jobs.map((j) => this.toJobProfile(j)),
+    };
   }
 
   /**
@@ -231,6 +302,7 @@ export class JobsService {
    */
   private toJobProfile(j: RomeJob): JobProfile {
     const accesEmploi = this.normalizeText(j.accesEmploi);
+    const domain = romeDomainByCode(j.codeGrandDomaine);
     return {
       slug: j.code,
       title: j.libelle,
@@ -248,6 +320,9 @@ export class JobsService {
       workContext: this.extractContextLabels(j.contextesTravail),
       recruitmentLevel: this.normalizeRecruitmentLevel(j.recruitmentLevel),
       offerCount: j.offerCount,
+      domainCode: domain?.code ?? null,
+      domainLabel: domain?.label ?? null,
+      domainSlug: domain?.slug ?? null,
     };
   }
 

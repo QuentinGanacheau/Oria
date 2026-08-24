@@ -25,6 +25,9 @@ export const metadata: Metadata = {
 };
 
 type JobListItem = { slug: string; title: string; tagline: string };
+type DomainSummary = { code: string; slug: string; label: string; count: number };
+
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 
 /**
  * Récupère la liste des métiers. En cas d'indisponibilité de l'API on renvoie
@@ -33,9 +36,8 @@ type JobListItem = { slug: string; title: string; tagline: string };
  * Le fetch garde son cache de données (revalidate 3600) même en page dynamique.
  */
 async function fetchJobs(): Promise<JobListItem[]> {
-  const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
   try {
-    const res = await fetch(`${base}/v1/jobs`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${API_BASE}/v1/jobs`, { next: { revalidate: 3600 } });
     if (!res.ok) {
       console.error(`[/metiers] API /v1/jobs a répondu ${res.status}`);
       return [];
@@ -43,6 +45,17 @@ async function fetchJobs(): Promise<JobListItem[]> {
     return (await res.json()) as JobListItem[];
   } catch (err) {
     console.error("[/metiers] échec de l'appel à /v1/jobs", err);
+    return [];
+  }
+}
+
+/** Liste des grands domaines (pour les cartes de navigation thématique). */
+async function fetchDomains(): Promise<DomainSummary[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/jobs/domains`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    return (await res.json()) as DomainSummary[];
+  } catch {
     return [];
   }
 }
@@ -62,7 +75,7 @@ function initialOf(title: string): string {
 }
 
 export default async function MetiersIndexPage() {
-  const jobs = await fetchJobs();
+  const [jobs, domains] = await Promise.all([fetchJobs(), fetchDomains()]);
 
   // Dégradation propre : si l'API est momentanément indisponible, on rend une
   // page valide (pas de 500, pas d'index vide trompeur) invitant à réessayer.
@@ -161,8 +174,36 @@ export default async function MetiersIndexPage() {
         </div>
       </header>
 
-      {/* ── Liste groupée ────────────────────────────────────────────── */}
+      {/* ── Navigation par domaine (cartes) ──────────────────────────── */}
+      {domains.length > 0 && (
+        <section className="border-b border-line">
+          <div className="mx-auto max-w-[920px] px-6 py-12">
+            <h2 className="font-serif text-2xl tracking-tight">Par domaine</h2>
+            <p className="mt-1.5 text-[15px] text-muted">
+              Explore les métiers regroupés par grand secteur d'activité.
+            </p>
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {domains.map((domain) => (
+                <li key={domain.slug}>
+                  <Link
+                    href={`/metiers/domaine/${domain.slug}`}
+                    className="flex h-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-accent-soft"
+                  >
+                    <span className="text-[15px] font-medium text-ink">{domain.label}</span>
+                    <span className="flex-none text-[13px] font-semibold text-muted">
+                      {domain.count}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {/* ── Liste groupée (A–Z) ──────────────────────────────────────── */}
       <main className="mx-auto max-w-[920px] px-6 py-12">
+        <h2 className="mb-8 font-serif text-2xl tracking-tight">Par ordre alphabétique</h2>
         {letters.map((letter) => (
           <section key={letter} id={`lettre-${letter}`} className="mb-12 scroll-mt-20 last:mb-0">
             <h2 className="mb-4 font-serif text-3xl text-accent">{letter}</h2>
