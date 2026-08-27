@@ -33,7 +33,9 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('recruitmentLevel:', d.get\\('recruitmentLevel','ABSENT'\\)\\); print\\('offerCount:', d.get\\('offerCount','ABSENT'\\)\\)\")",
       "Bash(grep -v \"^$\")",
       "mcp__claude_ai_Notion__notion-search",
-      "mcp__claude_ai_Notion__notion-update-page"
+      "mcp__claude_ai_Notion__notion-update-page",
+      "Bash(ls -la public/)",
+      "Bash(ls next.config.*)"
     ]
   }
 }

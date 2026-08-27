@@ -132,9 +132,38 @@ function Logo({ className = "" }: { className?: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oryam.fr";
+
+// Données structurées identité de site : Organization + WebSite.
+const HOME_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "Oryam",
+      url: `${SITE_URL}/`,
+      logo: `${SITE_URL}/web-app-manifest-512x512.png`,
+      description:
+        "Le bilan de compétence express, digital et abordable : explore les métiers qui te ressemblent en 20 minutes.",
+    },
+    {
+      "@type": "WebSite",
+      name: "Oryam",
+      url: `${SITE_URL}/`,
+      inLanguage: "fr-FR",
+    },
+  ],
+};
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-paper text-ink">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(HOME_JSON_LD).replace(/</g, "\\u003c"),
+        }}
+      />
 
       {/* ── Navigation ──────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 border-b border-line bg-paper/80 backdrop-blur-md">
@@ -151,6 +180,9 @@ export default function Home() {
               <a href="#faq" className="transition-colors hover:text-accent-ink">
                 FAQ
               </a>
+              <Link href="/metiers" className="transition-colors hover:text-accent-ink">
+                Métiers
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3.5">
@@ -539,6 +571,9 @@ export default function Home() {
         <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-5 px-6 text-sm text-muted">
           <Logo className="text-[22px]" />
           <nav className="flex flex-wrap gap-[22px]">
+            <Link href="/metiers" className="transition-colors hover:text-accent-ink">
+              Tous les métiers
+            </Link>
             <Link href="/mentions-legales" className="transition-colors hover:text-accent-ink">
               Mentions légales
             </Link>

@@ -1,0 +1,227 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import ThemeToggle from "@/components/theme-toggle";
+
+// Rendu dynamique volontaire : la page ne doit PAS être prérendue au build.
+// Sinon un simple hoquet de l'API au moment du build Vercel fait échouer tout
+// le déploiement. Ici le HTML est rendu à la requête, mais l'appel à /v1/jobs
+// garde son propre cache de données (fetch revalidate 3600 ci-dessous) — donc
+// le coût réel reste minime. La liste ROME bouge rarement.
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Tous les métiers — annuaire des fiches métier",
+  description:
+    "Explore l'ensemble des fiches métier Oryam : missions, salaire, formations et débouchés pour plus de 1500 métiers, du lycée à la reconversion.",
+  alternates: { canonical: "/metiers" },
+  openGraph: {
+    type: "website",
+    url: "/metiers",
+    title: "Tous les métiers — annuaire des fiches métier | Oryam",
+    description:
+      "Explore l'ensemble des fiches métier Oryam : missions, salaire, formations et débouchés.",
+  },
+};
+
+type JobListItem = { slug: string; title: string; tagline: string };
+type DomainSummary = { code: string; slug: string; label: string; count: number };
+
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+
+/**
+ * Récupère la liste des métiers. En cas d'indisponibilité de l'API on renvoie
+ * un tableau vide (dégradation propre) plutôt que de jeter : la page rend alors
+ * un état « liste momentanément indisponible » au lieu de casser le rendu.
+ * Le fetch garde son cache de données (revalidate 3600) même en page dynamique.
+ */
+async function fetchJobs(): Promise<JobListItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/jobs`, { next: { revalidate: 3600 } });
+    if (!res.ok) {
+      console.error(`[/metiers] API /v1/jobs a répondu ${res.status}`);
+      return [];
+    }
+    return (await res.json()) as JobListItem[];
+  } catch (err) {
+    console.error("[/metiers] échec de l'appel à /v1/jobs", err);
+    return [];
+  }
+}
+
+/** Liste des grands domaines (pour les cartes de navigation thématique). */
+async function fetchDomains(): Promise<DomainSummary[]> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/jobs/domains`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    return (await res.json()) as DomainSummary[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Normalise une initiale pour le regroupement A–Z : majuscule sans accent.
+ * Tout ce qui n'est pas une lettre A–Z (chiffres, symboles) tombe dans « # ».
+ */
+function initialOf(title: string): string {
+  const first = title
+    .trim()
+    .charAt(0)
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "") // retire les diacritiques (É → E)
+    .toUpperCase();
+  return /[A-Z]/.test(first) ? first : "#";
+}
+
+export default async function MetiersIndexPage() {
+  const [jobs, domains] = await Promise.all([fetchJobs(), fetchDomains()]);
+
+  // Dégradation propre : si l'API est momentanément indisponible, on rend une
+  // page valide (pas de 500, pas d'index vide trompeur) invitant à réessayer.
+  if (jobs.length === 0) {
+    return (
+      <div className="min-h-screen bg-paper text-ink">
+        <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
+          <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-75"
+            >
+              <ArrowLeft className="size-4" /> Accueil
+            </Link>
+            <ThemeToggle />
+          </div>
+        </div>
+        <main className="mx-auto max-w-[920px] px-6 py-24 text-center">
+          <h1 className="font-serif text-[clamp(28px,4vw,40px)] leading-tight tracking-tight">
+            Annuaire momentanément indisponible
+          </h1>
+          <p className="mx-auto mt-4 max-w-[48ch] text-lg text-ink-soft">
+            La liste des métiers n'a pas pu être chargée. Réessaie dans un instant,
+            ou lance directement le test pour découvrir les métiers qui te ressemblent.
+          </p>
+          <Link
+            href="/questionnaire"
+            className="mt-8 inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Faire le test
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  // Regroupement par initiale, tri des groupes et des métiers (locale fr).
+  const groups = new Map<string, JobListItem[]>();
+  for (const job of jobs) {
+    const letter = initialOf(job.title);
+    (groups.get(letter) ?? groups.set(letter, []).get(letter)!).push(job);
+  }
+  const letters = [...groups.keys()].sort((a, b) => a.localeCompare(b, "fr"));
+  for (const letter of letters) {
+    groups.get(letter)!.sort((a, b) => a.title.localeCompare(b.title, "fr"));
+  }
+
+  return (
+    <div className="min-h-screen bg-paper text-ink">
+      {/* ── Topbar ───────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-75"
+          >
+            <ArrowLeft className="size-4" /> Accueil
+          </Link>
+          <ThemeToggle />
+        </div>
+      </div>
+
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <header className="border-b border-line">
+        <div className="mx-auto max-w-[920px] px-6 py-12">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
+            Annuaire des métiers
+          </p>
+          <h1 className="mt-3.5 font-serif text-[clamp(34px,5.2vw,56px)] leading-[1.05] tracking-tight">
+            Tous les métiers
+          </h1>
+          <p className="mt-3 max-w-[62ch] text-lg text-ink-soft">
+            {jobs.length.toLocaleString("fr-FR")} fiches métier : missions, salaire,
+            formations et débouchés. Pour trouver celles qui te ressemblent,{" "}
+            <Link href="/questionnaire" className="font-semibold text-accent-ink underline underline-offset-2">
+              fais le test en 20 minutes
+            </Link>
+            .
+          </p>
+
+          {/* Navigation A–Z */}
+          <nav
+            aria-label="Navigation par lettre"
+            className="mt-6 flex flex-wrap gap-1.5"
+          >
+            {letters.map((letter) => (
+              <a
+                key={letter}
+                href={`#lettre-${letter}`}
+                className="grid size-9 place-items-center rounded-lg border border-line bg-surface text-sm font-semibold text-accent-ink transition-colors hover:bg-accent-soft"
+              >
+                {letter}
+              </a>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      {/* ── Navigation par domaine (cartes) ──────────────────────────── */}
+      {domains.length > 0 && (
+        <section className="border-b border-line">
+          <div className="mx-auto max-w-[920px] px-6 py-12">
+            <h2 className="font-serif text-2xl tracking-tight">Par domaine</h2>
+            <p className="mt-1.5 text-[15px] text-muted">
+              Explore les métiers regroupés par grand secteur d'activité.
+            </p>
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {domains.map((domain) => (
+                <li key={domain.slug}>
+                  <Link
+                    href={`/metiers/domaine/${domain.slug}`}
+                    className="flex h-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-accent-soft"
+                  >
+                    <span className="text-[15px] font-medium text-ink">{domain.label}</span>
+                    <span className="flex-none text-[13px] font-semibold text-muted">
+                      {domain.count}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {/* ── Liste groupée (A–Z) ──────────────────────────────────────── */}
+      <main className="mx-auto max-w-[920px] px-6 py-12">
+        <h2 className="mb-8 font-serif text-2xl tracking-tight">Par ordre alphabétique</h2>
+        {letters.map((letter) => (
+          <section key={letter} id={`lettre-${letter}`} className="mb-12 scroll-mt-20 last:mb-0">
+            <h2 className="mb-4 font-serif text-3xl text-accent">{letter}</h2>
+            <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.get(letter)!.map((job) => (
+                <li key={job.slug}>
+                  <Link
+                    href={`/metiers/${job.slug}`}
+                    className="block rounded-lg py-1.5 text-[15px] text-ink-soft transition-colors hover:text-accent-ink"
+                  >
+                    {job.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </main>
+    </div>
+  );
+}

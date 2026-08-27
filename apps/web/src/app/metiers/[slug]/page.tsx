@@ -1,12 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Building2, Coins } from "lucide-react";
+import { ArrowLeft, Building2, ChevronRight, Coins } from "lucide-react";
 import ThemeToggle from "@/components/theme-toggle";
 import JobPageTabs from "./job-page-tabs";
 import ScoreRing from "./score-ring";
 import SaveButton from "./save-button";
 
-export const dynamic = "force-dynamic";
+// ISR à la demande : aucune fiche n'est générée au build (generateStaticParams
+// renvoie []), chaque métier est rendu au 1er hit puis mis en cache et revalidé
+// toutes les heures. Évite ~1584 appels API au build et garde des pages
+// statiques cacheables (bon pour le crawl et le TTFB).
+export const revalidate = 3600;
+export const dynamicParams = true;
+
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 type RecruitmentLevel = "high" | "medium" | "low" | null;
 
@@ -22,7 +32,12 @@ type Job = {
   workContext: string;
   recruitmentLevel: RecruitmentLevel;
   offerCount: number | null;
+  domainCode: string | null;
+  domainLabel: string | null;
+  domainSlug: string | null;
 };
+
+type SiblingJob = { slug: string; title: string };
 
 /**
  * Métadonnées d'affichage du badge de recrutement.
@@ -42,6 +57,8 @@ function recruitmentMeta(level: RecruitmentLevel) {
   }
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oryam.fr";
+
 async function fetchJob(slug: string): Promise<Job> {
   const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
   const res = await fetch(`${base}/v1/jobs/${slug}`, {
@@ -52,12 +69,117 @@ async function fetchJob(slug: string): Promise<Job> {
   return res.json() as Promise<Job>;
 }
 
-export default async function MetierPage({ params }: { params: Promise<{ slug: string }> }) {
+/**
+ * Métiers du même domaine (hors le métier courant), pour le maillage interne
+ * « Métiers proches ». Dégradation propre : [] si le domaine est inconnu ou
+ * l'API indisponible — le bloc n'est alors simplement pas affiché.
+ */
+async function fetchSiblings(domainSlug: string, currentSlug: string): Promise<SiblingJob[]> {
+  const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${base}/v1/jobs/domains/${domainSlug}`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const domain = (await res.json()) as { jobs?: SiblingJob[] };
+    return (domain.jobs ?? []).filter((j) => j.slug !== currentSlug).slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * SEO par fiche : title/description uniques dérivés du métier ROME.
+ * `fetchJob` est mémoïsé par Next (même URL + revalidate) → pas de requête
+ * supplémentaire par rapport au rendu de la page.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
   const job = await fetchJob(slug);
 
+  const title = `${job.title} — fiche métier, missions, salaire et formations`;
+  // Description ≤ ~160 caractères pour éviter la troncature SERP.
+  const raw = job.summary || job.tagline || `Découvre le métier ${job.title}.`;
+  const description = raw.length > 158 ? `${raw.slice(0, 155).trimEnd()}…` : raw;
+  const url = `/metiers/${job.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      title,
+      description,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
+
+export default async function MetierPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const job = await fetchJob(slug);
+  const url = `${SITE_URL}/metiers/${job.slug}`;
+  const hasDomain = !!(job.domainSlug && job.domainLabel);
+  const siblings = hasDomain ? await fetchSiblings(job.domainSlug!, job.slug) : [];
+
+  // Fil d'Ariane structuré : intègre le niveau domaine quand il est connu
+  // (Accueil › Métiers › <domaine> › <métier>).
+  const breadcrumb = [
+    { "@type": "ListItem", position: 1, name: "Accueil", item: `${SITE_URL}/` },
+    { "@type": "ListItem", position: 2, name: "Métiers", item: `${SITE_URL}/metiers` },
+    ...(hasDomain
+      ? [
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: job.domainLabel!,
+            item: `${SITE_URL}/metiers/domaine/${job.domainSlug!}`,
+          },
+        ]
+      : []),
+    { "@type": "ListItem", position: hasDomain ? 4 : 3, name: job.title, item: url },
+  ];
+
+  // Données structurées : Occupation (le code ROME sert d'occupationalCategory)
+  // + fil d'Ariane. Éligible aux rich results Google.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Occupation",
+        name: job.title,
+        description: job.summary || job.tagline || undefined,
+        occupationalCategory: job.slug,
+        skills: job.skills.length > 0 ? job.skills.join(", ") : undefined,
+        url,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumb,
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-paper text-ink">
+      {/* Données structurées (JSON-LD). `<` échappe un éventuel "<" dans les
+          champs métier pour empêcher toute fermeture prématurée du <script>. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       {/* ── Topbar ───────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[920px] items-center justify-between px-6">
@@ -78,6 +200,23 @@ export default async function MetierPage({ params }: { params: Promise<{ slug: s
       <header className="border-b border-line">
         <div className="mx-auto grid max-w-[920px] grid-cols-1 items-center gap-8 px-6 py-12 sm:grid-cols-[1fr_auto]">
           <div>
+            {hasDomain && (
+              <nav
+                aria-label="Fil d'Ariane"
+                className="mb-4 flex flex-wrap items-center gap-1.5 text-[13px] text-muted"
+              >
+                <Link href="/metiers" className="transition-colors hover:text-accent-ink">
+                  Métiers
+                </Link>
+                <ChevronRight className="size-3.5" />
+                <Link
+                  href={`/metiers/domaine/${job.domainSlug}`}
+                  className="transition-colors hover:text-accent-ink"
+                >
+                  {job.domainLabel}
+                </Link>
+              </nav>
+            )}
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-ink">
               Fiche métier
             </p>
@@ -124,6 +263,39 @@ export default async function MetierPage({ params }: { params: Promise<{ slug: s
       </header>
 
       <JobPageTabs job={job} />
+
+      {/* ── Métiers proches (maillage interne, même domaine) ─────────── */}
+      {siblings.length > 0 && (
+        <section className="border-t border-line">
+          <div className="mx-auto max-w-[920px] px-6 py-12">
+            <h2 className="font-serif text-2xl tracking-tight">Métiers proches</h2>
+            {hasDomain && (
+              <p className="mt-1.5 text-[15px] text-muted">
+                D’autres métiers du domaine{" "}
+                <Link
+                  href={`/metiers/domaine/${job.domainSlug}`}
+                  className="font-medium text-accent-ink underline underline-offset-2"
+                >
+                  {job.domainLabel}
+                </Link>
+                .
+              </p>
+            )}
+            <ul className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+              {siblings.map((sib) => (
+                <li key={sib.slug}>
+                  <Link
+                    href={`/metiers/${sib.slug}`}
+                    className="block rounded-lg py-1.5 text-[15px] text-ink-soft transition-colors hover:text-accent-ink"
+                  >
+                    {sib.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
