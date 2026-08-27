@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import DeckResults from "./deck-results";
 import ResultatsClient from "./resultats-client";
+
+// Page à état (résultats par session) : sans valeur d'index et personnelle.
+// On la retire de l'index (en complément du disallow robots.txt).
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 /**
  * Bascule entre la vue liste (legacy) et la vue swipe deck (Phase C).

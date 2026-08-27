@@ -30,8 +30,21 @@ export class JobsController {
     return { content };
   }
 
-  // La route générique doit être APRÈS les routes spécifiques (:slug/sheet)
-  // pour éviter que NestJS interprète "sheet" comme un slug.
+  /** Liste des grands domaines ROME + nb de métiers (hub `/metiers`). */
+  @Get('domains')
+  listDomains() {
+    return this.jobs.listDomains();
+  }
+
+  /** Contenu d'une page pilier : le domaine et ses métiers. */
+  @Get('domains/:slug')
+  getDomain(@Param('slug') slug: string) {
+    return this.jobs.findByDomainSlug(slug);
+  }
+
+  // La route générique doit être APRÈS les routes spécifiques (:slug/sheet,
+  // domains, domains/:slug) pour éviter que NestJS interprète "domains" ou
+  // "sheet" comme un slug de métier.
   @Get(':slug')
   getOne(@Param('slug') slug: string) {
     return this.jobs.findBySlug(slug);

@@ -19,9 +19,42 @@ const sans = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Oryam — Métiers qui te ressemblent",
+  // Base absolue pour résoudre les URLs Open Graph / canonical relatives.
+  // En prod : oryam.fr. Surchargée par NEXT_PUBLIC_SITE_URL si défini (preview Vercel).
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://oryam.fr",
+  ),
+  title: {
+    default: "Oryam — Le bilan de compétence express, en 20 minutes",
+    template: "%s | Oryam",
+  },
   description:
-    "Questionnaire dynamique et fiches métiers. SaaS d’orientation et de reconversion professionnelle.",
+    "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence, pour ton orientation ou ta reconversion.",
+  applicationName: "Oryam",
+  keywords: [
+    "bilan de compétence",
+    "orientation",
+    "reconversion professionnelle",
+    "test métier",
+    "fiche métier",
+    "orientation scolaire",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    siteName: "Oryam",
+    url: "/",
+    title: "Oryam — Le bilan de compétence express, en 20 minutes",
+    description:
+      "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Oryam — Le bilan de compétence express, en 20 minutes",
+    description:
+      "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence.",
+  },
   manifest: "/site.webmanifest",
   icons: {
     // On n'expose pas le favicon.svg (1,1 Mo : image raster embarquée) —
