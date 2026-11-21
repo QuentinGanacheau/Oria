@@ -151,7 +151,7 @@ export default async function MetiersIndexPage() {
             {jobs.length.toLocaleString("fr-FR")} fiches métier : missions, salaire,
             formations et débouchés. Pour trouver celles qui te ressemblent,{" "}
             <Link href="/questionnaire" className="font-semibold text-accent-ink underline underline-offset-2">
-              fais le test en 20 minutes
+              fais le test en 10 minutes
             </Link>
             .
           </p>

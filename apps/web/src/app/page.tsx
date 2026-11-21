@@ -144,7 +144,7 @@ const HOME_JSON_LD = {
       url: `${SITE_URL}/`,
       logo: `${SITE_URL}/web-app-manifest-512x512.png`,
       description:
-        "Le bilan de compétence express, digital et abordable : explore les métiers qui te ressemblent en 20 minutes.",
+        "Le bilan de compétences express, digital et abordable : explore les métiers qui te ressemblent en 10 minutes.",
     },
     {
       "@type": "WebSite",
@@ -291,7 +291,7 @@ export default function Home() {
           <div className="mx-auto flex max-w-[1180px] flex-wrap px-6 py-6">
             {[
               { value: "1 500+", label: "métiers passés au crible" },
-              { value: "5 min", label: "en moyenne" },
+              { value: "10 min", label: "pour ton bilan" },
               { value: "3", label: "pistes gratuites" },
               { value: "IA", label: "personnalisation poussée" },
             ].map((stat, i) => (
@@ -553,7 +553,7 @@ export default function Home() {
             Prêt à trouver ta voie ?
           </h2>
           <p className="mt-4 text-[18px] text-ink-soft">
-            5 minutes. Sans inscription. Tes 3 premières pistes sont gratuites.
+            10 minutes. Sans inscription. Tes 3 premières pistes sont gratuites.
           </p>
           <Link
             href="/questionnaire"

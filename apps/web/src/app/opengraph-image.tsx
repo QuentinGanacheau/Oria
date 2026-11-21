@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 // Image Open Graph par défaut (partages de la home et fallback des pages sans
 // image dédiée). 1200×630, rendue via next/og. Palette de marque (globals.css).
-export const alt = "Oryam — le bilan de compétence express, en 20 minutes";
+export const alt = "Oryam — le bilan de compétences express, en 10 minutes";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -57,7 +57,7 @@ export default function Image() {
               maxWidth: 940,
             }}
           >
-            Le bilan de compétence express, en 20 minutes.
+            Le bilan de compétences express, en 10 minutes.
           </div>
         </div>
 

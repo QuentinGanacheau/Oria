@@ -25,14 +25,14 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://oryam.fr",
   ),
   title: {
-    default: "Oryam — Le bilan de compétence express, en 20 minutes",
+    default: "Oryam — Le bilan de compétences express, en 10 minutes",
     template: "%s | Oryam",
   },
   description:
-    "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence, pour ton orientation ou ta reconversion.",
+    "Explore les métiers qui te ressemblent en 10 minutes. L'alternative digitale et abordable au bilan de compétences, pour ton orientation ou ta reconversion.",
   applicationName: "Oryam",
   keywords: [
-    "bilan de compétence",
+    "bilan de compétences",
     "orientation",
     "reconversion professionnelle",
     "test métier",
@@ -45,15 +45,15 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     siteName: "Oryam",
     url: "/",
-    title: "Oryam — Le bilan de compétence express, en 20 minutes",
+    title: "Oryam — Le bilan de compétences express, en 10 minutes",
     description:
-      "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence.",
+      "Explore les métiers qui te ressemblent en 10 minutes. L'alternative digitale et abordable au bilan de compétences.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Oryam — Le bilan de compétence express, en 20 minutes",
+    title: "Oryam — Le bilan de compétences express, en 10 minutes",
     description:
-      "Explore les métiers qui te ressemblent en 20 minutes. L'alternative digitale et abordable au bilan de compétence.",
+      "Explore les métiers qui te ressemblent en 10 minutes. L'alternative digitale et abordable au bilan de compétences.",
   },
   manifest: "/site.webmanifest",
   icons: {
