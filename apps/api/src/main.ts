@@ -1,5 +1,3 @@
-import './instrument';
-
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
@@ -7,10 +5,9 @@ import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap() {
-  // Adaptateur Express passé explicitement : l'instrumentation Sentry
-  // (OpenTelemetry) intercepte les require() et casse le chargement DYNAMIQUE
-  // de @nestjs/platform-express que ferait NestFactory.create(AppModule) seul
-  // → "No driver (HTTP) has been selected". L'import statique contourne ça.
+  // Adaptateur Express passé explicitement : dans ce monorepo, le chargement
+  // DYNAMIQUE de @nestjs/platform-express par NestFactory.create(AppModule)
+  // échoue ("No driver (HTTP) has been selected"). L'import statique le garantit.
   const app = await NestFactory.create(AppModule, new ExpressAdapter());
   app.setGlobalPrefix('v1');
   // FRONTEND_URL accepte plusieurs origines séparées par des virgules.
